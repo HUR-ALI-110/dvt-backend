@@ -1,0 +1,57 @@
+2026-05-11 18:06:21.885 +05:00 [INF] HTTP GET /swagger responded 301 in 13.6912 ms
+2026-05-11 18:06:21.970 +05:00 [INF] HTTP GET /swagger/index.html responded 200 in 32.9859 ms
+2026-05-11 18:06:22.014 +05:00 [INF] HTTP GET /swagger/swagger-ui.css responded 200 in 11.3888 ms
+2026-05-11 18:06:22.014 +05:00 [INF] HTTP GET /swagger/index.css responded 200 in 7.8365 ms
+2026-05-11 18:06:22.014 +05:00 [INF] HTTP GET /swagger/index.js responded 200 in 0.4795 ms
+2026-05-11 18:06:22.023 +05:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 14.4456 ms
+2026-05-11 18:06:22.023 +05:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 200 in 14.4238 ms
+2026-05-11 18:06:22.036 +05:00 [INF] HTTP GET /swagger/index.js responded 200 in 0.4188 ms
+2026-05-11 18:06:22.036 +05:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 200 in 0.5355 ms
+2026-05-11 18:06:22.200 +05:00 [INF] HTTP GET /swagger/favicon-32x32.png responded 200 in 0.7609 ms
+2026-05-11 18:06:22.296 +05:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 98.2953 ms
+2026-05-11 18:06:22.484 +05:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 0.5988 ms
+2026-05-11 18:06:32.309 +05:00 [INF] HTTP GET /health responded 200 in 16.5428 ms
+2026-05-11 18:06:48.064 +05:00 [INF] API call GET /dashboard with parameters {}
+2026-05-11 18:07:02.863 +05:00 [ERR] Dashboard error for view=null dealer=null
+Microsoft.Data.SqlClient.SqlException (0x80131904): A network-related or instance-specific error occurred while establishing a connection to SQL Server. The server was not found or was not accessible. Verify that the instance name is correct and that SQL Server is configured to allow remote connections. (provider: TCP Provider, error: 35 - An internal exception was caught)
+ ---> System.Net.Sockets.SocketException (00000005, 0xFFFDFFFF): nodename nor servname provided, or not known
+   at System.Net.Dns.GetHostEntryOrAddressesCore(String hostName, Boolean justAddresses, AddressFamily addressFamily, Nullable`1 activityOrDefault)
+   at System.Net.Dns.GetHostAddresses(String hostNameOrAddress, AddressFamily family)
+   at Microsoft.Data.SqlClient.SNI.SNITCPHandle.GetHostAddressesSortedByPreference(String serverName, SqlConnectionIPAddressPreference ipPreference)+MoveNext()
+   at Microsoft.Data.SqlClient.SNI.SNITCPHandle.Connect(String serverName, Int32 port, TimeoutTimer timeout, SqlConnectionIPAddressPreference ipPreference, String cachedFQDN, SQLDNSInfo& pendingDNSInfo)
+   at Microsoft.Data.SqlClient.SNI.SNITCPHandle..ctor(String serverName, Int32 port, TimeoutTimer timeout, Boolean parallel, SqlConnectionIPAddressPreference ipPreference, String cachedFQDN, SQLDNSInfo& pendingDNSInfo, Boolean tlsFirst, String hostNameInCertificate, String serverCertificateFilename)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.Connect(ServerInfo serverInfo, SqlInternalConnectionTds connHandler, TimeoutTimer timeout, SqlConnectionString connectionOptions, Boolean withFailover)
+   at Microsoft.Data.SqlClient.SqlInternalConnectionTds.AttemptOneLogin(ServerInfo serverInfo, String newPassword, SecureString newSecurePassword, TimeoutTimer timeout, Boolean withFailover)
+   at Microsoft.Data.SqlClient.SqlInternalConnectionTds.LoginNoFailover(ServerInfo serverInfo, String newPassword, SecureString newSecurePassword, Boolean redirectedUserInstance, SqlConnectionString connectionOptions, SqlCredential credential, TimeoutTimer timeout)
+   at Microsoft.Data.SqlClient.SqlInternalConnectionTds.OpenLoginEnlist(TimeoutTimer timeout, SqlConnectionString connectionOptions, SqlCredential credential, String newPassword, SecureString newSecurePassword, Boolean redirectedUserInstance)
+   at Microsoft.Data.SqlClient.SqlInternalConnectionTds..ctor(DbConnectionPoolIdentity identity, SqlConnectionString connectionOptions, SqlCredential credential, Object providerInfo, String newPassword, SecureString newSecurePassword, Boolean redirectedUserInstance, SqlConnectionString userConnectionOptions, SessionData reconnectSessionData, Boolean applyTransientFaultHandling, String accessToken, DbConnectionPool pool, Func`3 accessTokenCallback)
+   at Microsoft.Data.SqlClient.SqlConnectionFactory.CreateConnection(DbConnectionOptions options, DbConnectionPoolKey poolKey, Object poolGroupProviderInfo, DbConnectionPool pool, DbConnection owningConnection, DbConnectionOptions userOptions)
+   at Microsoft.Data.ProviderBase.DbConnectionFactory.CreatePooledConnection(DbConnectionPool pool, DbConnection owningObject, DbConnectionOptions options, DbConnectionPoolKey poolKey, DbConnectionOptions userOptions)
+   at Microsoft.Data.ProviderBase.DbConnectionPool.CreateObject(DbConnection owningObject, DbConnectionOptions userOptions, DbConnectionInternal oldConnection)
+   at Microsoft.Data.ProviderBase.DbConnectionPool.UserCreateRequest(DbConnection owningObject, DbConnectionOptions userOptions, DbConnectionInternal oldConnection)
+   at Microsoft.Data.ProviderBase.DbConnectionPool.TryGetConnection(DbConnection owningObject, UInt32 waitForMultipleObjectsTimeout, Boolean allowCreate, Boolean onlyOneCheckConnection, DbConnectionOptions userOptions, DbConnectionInternal& connection)
+   at Microsoft.Data.ProviderBase.DbConnectionPool.TryGetConnection(DbConnection owningObject, TaskCompletionSource`1 retry, DbConnectionOptions userOptions, DbConnectionInternal& connection)
+   at Microsoft.Data.ProviderBase.DbConnectionFactory.TryGetConnection(DbConnection owningConnection, TaskCompletionSource`1 retry, DbConnectionOptions userOptions, DbConnectionInternal oldConnection, DbConnectionInternal& connection)
+   at Microsoft.Data.ProviderBase.DbConnectionInternal.TryOpenConnectionInternal(DbConnection outerConnection, DbConnectionFactory connectionFactory, TaskCompletionSource`1 retry, DbConnectionOptions userOptions)
+   at Microsoft.Data.ProviderBase.DbConnectionClosed.TryOpenConnection(DbConnection outerConnection, DbConnectionFactory connectionFactory, TaskCompletionSource`1 retry, DbConnectionOptions userOptions)
+   at Microsoft.Data.SqlClient.SqlConnection.TryOpen(TaskCompletionSource`1 retry, SqlConnectionOverrides overrides)
+   at Microsoft.Data.SqlClient.SqlConnection.Open(SqlConnectionOverrides overrides)
+   at Microsoft.Data.SqlClient.SqlConnection.Open()
+   at ICTA_DVT.Services.DvtDbService.OpenConnection() in /Users/huralihadi/Desktop/dvt-overhaul/dvt-backend/Services/DvtDbService.cs:line 28
+   at ICTA_DVT.Services.DvtDbService.GetFilterOptions() in /Users/huralihadi/Desktop/dvt-overhaul/dvt-backend/Services/DvtDbService.cs:line 98
+   at ICTA_DVT.Routes.DashboardRoutes.<>c.<MapDashboardRoutes>b__0_0(String view, String dealer, String scope, String district, String date, IConfiguration config, DvtDbService db) in /Users/huralihadi/Desktop/dvt-overhaul/dvt-backend/Routes/DashboardRoutes.cs:line 32
+ClientConnectionId:00000000-0000-0000-0000-000000000000
+2026-05-11 18:07:02.885 +05:00 [ERR] HTTP GET /dashboard responded 500 in 14826.8247 ms
+2026-05-11 18:20:30.907 +05:00 [INF] HTTP GET /swagger/index.html responded 304 in 38.8483 ms
+2026-05-11 18:20:30.974 +05:00 [INF] HTTP GET /.well-known/appspecific/com.chrome.devtools.json responded 404 in 4.7857 ms
+2026-05-11 18:20:30.999 +05:00 [INF] HTTP GET /swagger/index.js responded 304 in 3.4879 ms
+2026-05-11 18:20:31.000 +05:00 [INF] HTTP GET /swagger/index.css responded 304 in 5.6585 ms
+2026-05-11 18:20:31.000 +05:00 [INF] HTTP GET /swagger/swagger-ui.css responded 304 in 12.3782 ms
+2026-05-11 18:20:31.000 +05:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 304 in 5.7625 ms
+2026-05-11 18:20:31.004 +05:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 304 in 9.2450 ms
+2026-05-11 18:20:31.024 +05:00 [INF] HTTP GET /swagger/index.js responded 304 in 0.2570 ms
+2026-05-11 18:20:31.027 +05:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 304 in 1.8583 ms
+2026-05-11 18:20:31.031 +05:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 304 in 0.1720 ms
+2026-05-11 18:20:31.304 +05:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 78.1844 ms
