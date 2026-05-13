@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ICTA_DVT.Models;
 
 // ── Shared ───────────────────────────────────────────────────────────────────
@@ -8,7 +10,14 @@ public record GeoParams(int GeoTypeId, string GeoValue);
 
 public record FilterOption(string Value, string Label);
 
-public record DashboardFilters(string Dealer, string Scope, string District, string Date);
+public record DashboardFilters(
+    [property: JsonPropertyName("report_id")]    string ReportId,
+    [property: JsonPropertyName("report_title")] string ReportTitle,
+    [property: JsonPropertyName("geo_type_id")]  string GeoTypeId,
+    [property: JsonPropertyName("geo_value")]    string GeoValue,
+    [property: JsonPropertyName("geo_title")]    string GeoTitle,
+    [property: JsonPropertyName("date_type_id")] string DateTypeId,
+    [property: JsonPropertyName("time_title")]   string TimeTitle);
 
 public record ShellNavItem(string Id, string Label, string Href, string Kind);
 
