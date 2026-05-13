@@ -8,33 +8,37 @@ public static class DashboardRoutes
 {
     public static void MapDashboardRoutes(this WebApplication app)
     {
-        // GET /dashboard?view=overview&dealer=329&scope=all&district=all-district&date=2024-01-01
+        // GET /dashboard?view=overview&report_id=716&geo_type_id=1&geo_value=3719&geo_title=...&date_type_id=11&time_title=2026YTD
         app.MapGet("/dashboard", (
             string? view,
-            string? dealer,
-            string? scope,
-            string? district,
-            string? date,
-            IConfiguration config,
+            string? report_id,
+            string? report_title,
+            string? geo_type_id,
+            string? geo_value,
+            string? geo_title,
+            string? date_type_id,
+            string? time_title,
             DvtDbService db) =>
         {
             try
             {
                 var resolvedView = view ?? "overview";
-                var geo = DvtDbService.ResolveGeoParams(dealer, scope, district);
 
                 var filters = new DashboardFilters(
-                    Dealer: dealer ?? "all-dealer",
-                    Scope: scope ?? "all",
-                    District: district ?? "all-district",
-                    Date: date ?? $"{DateTime.Now.Year}-01-01");
+                    ReportId:    report_id    ?? "",
+                    ReportTitle: report_title ?? resolvedView,
+                    GeoTypeId:   geo_type_id  ?? "1",
+                    GeoValue:    geo_value    ?? "",
+                    GeoTitle:    geo_title    ?? "",
+                    DateTypeId:  date_type_id ?? "11",
+                    TimeTitle:   time_title   ?? "");
 
                 var filterOptions = db.GetFilterOptions();
-                var summary = db.GetDealerSummary(geo, date, config.GetValue<int>("ReportIds:ManagementOverview"));
+                var summary       = db.GetDealerSummary(filters);
 
                 var shell = new DashboardShellData(
                     BrandLabel: "DVT",
-                    ReportButtonLabel: "View Full Report",
+                    ReportButtonLabel: "Get Report",
                     PrimaryTabs: BuildPrimaryTabs(),
                     DashboardPages: BuildDashboardPages(),
                     Filters: filters,
@@ -43,17 +47,17 @@ public static class DashboardRoutes
 
                 object page = resolvedView switch
                 {
-                    "service-parts" => db.GetServicePartsData(geo, date, config.GetValue<int>("ReportIds:PartsOverview")),
-                    "ev-readiness" => db.GetEvReadinessData(geo, date, config.GetValue<int>("ReportIds:EvMobileSurvey")),
-                    "sales" => db.GetSalesData(geo, date, config.GetValue<int>("ReportIds:SalesTotal")),
-                    _ => db.GetOverviewData(geo, date, config.GetValue<int>("ReportIds:ManagementOverview"))
+                    "service-parts" => db.GetServicePartsData(filters),
+                    "ev-readiness"  => db.GetEvReadinessData(filters),
+                    "sales"         => db.GetSalesData(filters),
+                    _               => db.GetOverviewData(filters)
                 };
 
                 return Results.Ok(new DashboardPayload(resolvedView, shell, page));
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Dashboard error for view={View} dealer={Dealer}", view, dealer);
+                Log.Error(ex, "Dashboard error for view={View}", view);
                 return Results.Problem("Failed to load dashboard data.");
             }
         })

@@ -17,7 +17,7 @@ public sealed class DvtDbService
     {
         _config = config;
         _connStr = config.GetConnectionString("icta_ideas_app")
-            ?? throw new InvalidOperationException("Connection string 'icta_ideas_app' is not configured.");
+                   ?? throw new InvalidOperationException("Connection string 'icta_ideas_app' is not configured.");
     }
 
     // ── Connection factory ───────────────────────────────────────────────────
@@ -29,7 +29,7 @@ public sealed class DvtDbService
         return conn;
     }
 
-    // ── XML parms builder ────────────────────────────────────────────────────
+    // ── XML parms builders ───────────────────────────────────────────────────
 
     public static string BuildXmlParms(Dictionary<string, string?> parms)
     {
@@ -39,8 +39,24 @@ public sealed class DvtDbService
             if (value is not null)
                 sb.Append($"<{key}>{SecurityElement.Escape(value)}</{key}>");
         }
+
         sb.Append("</parms>");
         return sb.ToString();
+    }
+
+    private static string BuildOverviewXmlParms(DashboardFilters filters)
+    {
+        return BuildXmlParms(new Dictionary<string, string?>
+        {
+            ["report_id"] = filters.ReportId,
+            ["geo_type_id"] = filters.GeoTypeId,
+            ["geo_value"] = filters.GeoValue,
+            ["geo_title"] = string.IsNullOrEmpty(filters.GeoTitle) ? null : $"Dealer = {filters.GeoTitle}",
+            ["date_type_id"] = filters.DateTypeId,
+            ["time_title"] = string.IsNullOrEmpty(filters.TimeTitle) ? null : $"Time = {filters.TimeTitle}",
+            ["request_id"] = DateTime.Now.ToString("yyyyMMddHHmmss"),
+            ["user_id"] = "system"
+        });
     }
 
     // ── Generic SP executor (XML @parms) ────────────────────────────────────
@@ -61,15 +77,35 @@ public sealed class DvtDbService
                 row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
             results.Add(row);
         }
+
         return results;
+    }
+
+    private List<Dictionary<string, object?>> TryExecute(string spName, string xmlParms)
+    {
+        try
+        {
+            return ExecuteXmlSp(spName, xmlParms);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "{SpName} failed", spName);
+            return new List<Dictionary<string, object?>>();
+        }
     }
 
     private static T? Col<T>(Dictionary<string, object?> row, string key)
     {
         if (!row.TryGetValue(key, out var v) || v is null) return default;
         if (v is T t) return t;
-        try { return (T)Convert.ChangeType(v, typeof(T)); }
-        catch { return default; }
+        try
+        {
+            return (T)Convert.ChangeType(v, typeof(T));
+        }
+        catch
+        {
+            return default;
+        }
     }
 
     private static string Str(Dictionary<string, object?> row, string key) => Col<string>(row, key) ?? string.Empty;
@@ -77,17 +113,14 @@ public sealed class DvtDbService
     private static int Int(Dictionary<string, object?> row, string key) => Col<int>(row, key);
     private static DateTime? Date(Dictionary<string, object?> row, string key) => Col<DateTime?>(row, key);
 
-    // ── Geo & date helpers ───────────────────────────────────────────────────
+    // ── Geo helper (kept for tracking routes) ───────────────────────────────
 
     public static GeoParams ResolveGeoParams(string? dealer, string? scope, string? district)
     {
-        // geo_type_id: 1=dealer, 2=district, 4=national/all
         if (!string.IsNullOrEmpty(dealer) && dealer != "all-dealer" && int.TryParse(dealer, out _))
             return new GeoParams(1, dealer);
-
         if (!string.IsNullOrEmpty(district) && district != "all-district")
             return new GeoParams(2, district);
-
         return new GeoParams(4, "0");
     }
 
@@ -106,37 +139,23 @@ public sealed class DvtDbService
             .Select(d => new FilterOption(d.LocationId.ToString(), $"{d.LocationName} ({d.LocationCode})"))
             .ToList();
 
-        var districtOptions = dealers
-            .Select(d => d.District1)
-            .Where(d => !string.IsNullOrEmpty(d))
-            .Distinct()
-            .OrderBy(d => d)
-            .Select(d => new FilterOption(d!, d!))
-            .Prepend(new FilterOption("all-district", "All Districts"))
-            .ToList();
+        var scopeOptions = new List<FilterOption> { new("1", "Dealer") };
 
-        var currentYear = DateTime.Now.Year;
-        var dateOptions = Enumerable.Range(0, 5)
-            .Select(i => currentYear - i)
-            .Select(y => new FilterOption($"{y}-01-01", $"{y} YTD"))
-            .ToList();
-
-        var scopeOptions = new List<FilterOption>
+        var dateOptions = new List<FilterOption>
         {
-            new("all", "All"),
-            new("dealer", "Dealer"),
-            new("district", "District")
+            new("13", "2024YTD"),
+            new("12", "2025YTD"),
+            new("11", "2026YTD"),
         };
 
-        return new DashboardFilterOptions(dealerOptions, scopeOptions, districtOptions, dateOptions);
+        return new DashboardFilterOptions(dealerOptions, scopeOptions, Array.Empty<FilterOption>(), dateOptions);
     }
 
     // ── Shell dealer summary ─────────────────────────────────────────────────
 
-    public DealerSummary GetDealerSummary(GeoParams geo, string? date, int reportId)
+    public DealerSummary GetDealerSummary(DashboardFilters filters)
     {
-        // Only meaningful at dealer level
-        if (geo.GeoTypeId != 1)
+        if (filters.GeoTypeId != "1" || string.IsNullOrEmpty(filters.GeoValue))
         {
             return new DealerSummary(
                 "DVT", "All Dealers", string.Empty, string.Empty,
@@ -144,44 +163,22 @@ public sealed class DvtDbService
                 Array.Empty<Certification>());
         }
 
-        var year = ExtractYear(date);
-        var xmlParms = BuildXmlParms(new Dictionary<string, string?>
-        {
-            ["report_id"] = reportId.ToString(),
-            ["geo_type_id"] = geo.GeoTypeId.ToString(),
-            ["geo_value"] = geo.GeoValue,
-            ["date_type_id"] = year.ToString(),
-            ["user_id"] = "system"
-        });
+        var xmlParms = BuildOverviewXmlParms(filters);
+        var mgmtRows = TryExecute("sp_rpt_dcn_management_overview", xmlParms);
+        var certRows = TryExecute("sp_rpt_dcn_ci_overview", xmlParms);
 
-        try
-        {
-            var rows = ExecuteXmlSp("sp_rpt_dcn_management_overview", xmlParms);
-            if (rows.Count == 0)
-                return EmptyDealerSummary();
+        if (mgmtRows.Count == 0) return EmptyDealerSummary();
 
-            var first = rows[0];
-            var locationName = Str(first, "location_name");
-            var dealerCode = Str(first, "DealerCode");
-            var region = Str(first, "Region");
-            var salesDist = Str(first, "Sales_District");
-            var svcDist = Str(first, "Service_District");
-
-            return new DealerSummary(
-                Eyebrow: "Dealer Visit Report",
-                Title: locationName,
-                Subtitle: string.Empty,
-                DealerIdLabel: dealerCode,
-                Region: region,
-                SalesDistrict: salesDist,
-                ServicePartsDistrict: svcDist,
-                Certifications: Array.Empty<Certification>());
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Failed to fetch dealer summary for geo {GeoValue}", geo.GeoValue);
-            return EmptyDealerSummary();
-        }
+        var first = mgmtRows[0];
+        return new DealerSummary(
+            Eyebrow: "Dealer Visit Report",
+            Title: Str(first, "location_name"),
+            Subtitle: string.Empty,
+            DealerIdLabel: Str(first, "DealerCode"),
+            Region: Str(first, "Region"),
+            SalesDistrict: Str(first, "Sales_District"),
+            ServicePartsDistrict: Str(first, "Service_District"),
+            Certifications: BuildCertifications(certRows));
     }
 
     private static DealerSummary EmptyDealerSummary() => new(
@@ -189,68 +186,246 @@ public sealed class DvtDbService
         string.Empty, string.Empty, string.Empty,
         Array.Empty<Certification>());
 
+    private static IReadOnlyList<Certification> BuildCertifications(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0) return Array.Empty<Certification>();
+        var r = rows[0];
+        return new[]
+        {
+            new Certification("COE Certified", IsActive(Str(r, "coe_cert")) ? "Yes" : "No"),
+            new Certification("Isuzu Connect", IsActive(Str(r, "isuzu_connect")) ? "Yes" : "No"),
+            new Certification("Cummins Certified", IsActive(Str(r, "cummins_cert")) ? "Yes" : "No"),
+            new Certification("Allison Certified", IsActive(Str(r, "allison_cert")) ? "Yes" : "No"),
+        };
+    }
+
+    private static bool IsActive(string value) =>
+        value is "1" or "yes" or "true" or "Yes" or "True" ||
+        (double.TryParse(value, out var d) && d > 0);
+
     // ── Overview page data ───────────────────────────────────────────────────
 
-    public OverviewDashboard GetOverviewData(GeoParams geo, string? date, int reportId)
+    public OverviewDashboard GetOverviewData(DashboardFilters filters)
     {
-        var year = ExtractYear(date);
-        var xmlParms = BuildXmlParms(new Dictionary<string, string?>
-        {
-            ["report_id"] = reportId.ToString(),
-            ["geo_type_id"] = geo.GeoTypeId.ToString(),
-            ["geo_value"] = geo.GeoValue,
-            ["date_type_id"] = year.ToString(),
-            ["user_id"] = "system"
-        });
+        if (string.IsNullOrEmpty(filters.GeoValue))
+            return new OverviewDashboard("Personnel", "Performance", "Metrics",
+                Array.Empty<OverviewPeopleSection>(),
+                Array.Empty<OverviewTableCard>(),
+                Array.Empty<OverviewMetricCard>());
 
-        List<Dictionary<string, object?>> rows;
-        try { rows = ExecuteXmlSp("sp_rpt_dcn_management_overview", xmlParms); }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "sp_rpt_dcn_management_overview failed");
-            rows = new List<Dictionary<string, object?>>();
-        }
+        var xmlParms = BuildOverviewXmlParms(filters);
 
-        // Group personnel rows by broad role category
-        var personRows = rows.Select(r => new PersonRow(
-            Role: Str(r, "Role"),
-            Name: Str(r, "Name"),
-            Secondary: Str(r, "DealerCode"))).ToList();
-
-        var peopleSection = new OverviewPeopleSection("Dealer Personnel", personRows);
+        var mgmtRows = TryExecute("sp_rpt_dcn_management_overview", xmlParms);
+        var personnelRows = TryExecute("sp_rpt_dcn_personel", xmlParms);
+        var ichibanRows = TryExecute("sp_rpt_dcn_ichiban_overview", xmlParms);
+        var vehicleRows = TryExecute("sp_rpt_dcn_vehicleinfo_overview", xmlParms);
+        var coopRows = TryExecute("sp_rpt_dcn_coop_trucks", xmlParms);
+        var objRows = TryExecute("sp_rpt_dcn_truck_sales_objectives", xmlParms);
+        var partSalesRows = TryExecute("sp_rpt_dcn_partsales_overview", xmlParms);
+        var csiRows = TryExecute("sp_rpt_dcn_csi_overview", xmlParms);
+        var partCoopRows = TryExecute("sp_rpt_dcn_parts_coop_overview", xmlParms);
+        var irisRows = TryExecute("sp_rpt_dcn_iris_overview", xmlParms);
 
         return new OverviewDashboard(
             LeftColumnTitle: "Personnel",
             CenterColumnTitle: "Performance",
             RightColumnTitle: "Metrics",
-            PeopleSections: new[] { peopleSection },
-            PerformanceTables: Array.Empty<OverviewTableCard>(),
-            MetricCards: Array.Empty<OverviewMetricCard>());
+            PeopleSections: new[]
+            {
+                BuildDealerPersonnelSection(personnelRows),
+                BuildWinnersCircleSection(personnelRows, ichibanRows),
+            },
+            PerformanceTables: new[]
+            {
+                BuildVehicleInfoTable(vehicleRows),
+                BuildCoopTrucksTable(coopRows),
+                BuildTruckSalesObjectivesTable(objRows),
+            },
+            MetricCards: new[]
+            {
+                BuildPartSalesMetricCard(partSalesRows),
+                BuildCsiMetricCard(csiRows),
+                BuildPartsCoopMetricCard(partCoopRows),
+                BuildIrisMetricCard(irisRows),
+            });
     }
+
+    // ── Overview section builders ────────────────────────────────────────────
+
+    private static OverviewPeopleSection BuildDealerPersonnelSection(List<Dictionary<string, object?>> rows)
+    {
+        var personRows = rows.Select(r =>
+            {
+                var dc = Str(r, "dealer");
+                return new PersonRow(
+                    dealer_principal: Str(r, "dealer_principal"),
+                    executive_manager: Str(r, "executive_manager"),
+                    ics_admin: Str(r, "ics_admin"),
+                    warranty_administrator: Str(r, "Warranty Administrator")
+            })
+            .Where(pr => !string.IsNullOrEmpty(pr.dealer))
+            .ToList();
+
+        return new OverviewPeopleSection("Dealer Personnel", personRows);
+    }
+
+    private static OverviewPeopleSection BuildWinnersCircleSection(
+        List<Dictionary<string, object?>> personnelRows,
+        List<Dictionary<string, object?>> ichibanRows)
+    {
+        var personRows = personnelRows.Select(r =>
+            {
+                var role = Str(r, "Role");
+                var name = Str(r, "Name");
+                if (string.IsNullOrEmpty(role)) role = Str(r, "category");
+                if (string.IsNullOrEmpty(name)) name = Str(r, "name");
+                return new PersonRow(Role: role, Name: name);
+            })
+            .Where(pr => !string.IsNullOrEmpty(pr.Name))
+            .ToList();
+
+        var footerLinks = ichibanRows
+            .Select(r => new FooterLink(Str(r, "location_name"), Str(r, "qualified")))
+            .Where(fl => !string.IsNullOrEmpty(fl.Label))
+            .ToList();
+
+        return new OverviewPeopleSection(
+            "Winner's Circle",
+            personRows,
+            footerLinks.Count > 0 ? footerLinks : null);
+    }
+
+    private static OverviewTableCard BuildVehicleInfoTable(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0)
+            return new OverviewTableCard("Truck Sales", new[] { "Series" }, Array.Empty<OverviewTableRow>());
+
+        var typeSales = rows.Select(r => Str(r, "type_sale")).Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
+        var seriesList = rows.Select(r => Str(r, "series")).Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
+        var columns = new[] { "Series" }.Concat(typeSales).ToList();
+
+        var tableRows = seriesList.Select(series =>
+        {
+            var values = typeSales.Select(type =>
+            {
+                var match = rows.FirstOrDefault(r => Str(r, "series") == series && Str(r, "type_sale") == type);
+                return match != null ? Str(match, "units") : "0";
+            }).ToList();
+            return new OverviewTableRow(series, values);
+        }).ToList();
+
+        return new OverviewTableCard("Truck Sales", columns, tableRows);
+    }
+
+    private static OverviewTableCard BuildCoopTrucksTable(List<Dictionary<string, object?>> rows)
+    {
+        var columns = new[] { "Period", "Total Reward", "Used", "Remaining", "Ordered" };
+        var tableRows = rows.Select(r =>
+        {
+            var period = Str(r, "Period");
+            if (string.IsNullOrEmpty(period)) period = Str(r, "year");
+            return new OverviewTableRow(period, new[]
+            {
+                Str(r, "total_reward"), Str(r, "reward_used"),
+                Str(r, "reward_remaining"), Str(r, "ordered")
+            });
+        }).ToList();
+        return new OverviewTableCard("Sales Co-Op", columns, tableRows);
+    }
+
+    private static OverviewTableCard BuildTruckSalesObjectivesTable(List<Dictionary<string, object?>> rows)
+    {
+        var columns = new[] { "Series", "Sales", "Objective", "% Achieved" };
+        var tableRows = rows.Select(r => new OverviewTableRow(
+            Str(r, "series"),
+            new[] { Str(r, "sales"), Str(r, "objective"), Str(r, "pct_achieved") }
+        )).ToList();
+        return new OverviewTableCard("Truck Sales Objectives", columns, tableRows);
+    }
+
+    private static OverviewMetricCard BuildPartSalesMetricCard(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0)
+            return new OverviewMetricCard("Dealer Parts Purchasing", Array.Empty<OverviewMetricRow>());
+        var r = rows[0];
+        var metricRows = new List<OverviewMetricRow>
+        {
+            SingleMetricRow("Captive", Str(r, "Captive")),
+            SingleMetricRow("Competitive", Str(r, "Competitive")),
+            SingleMetricRow("FV", Str(r, "FV")),
+            SingleMetricRow("Total", Str(r, "Total")),
+            SingleMetricRow("Objective", Str(r, "Objective")),
+            SingleMetricRow("Retail Total", Str(r, "retail_total")),
+        }.Where(row => row.Values.Any(v => !string.IsNullOrEmpty(v.Value))).ToList();
+        return new OverviewMetricCard("Dealer Parts Purchasing", metricRows);
+    }
+
+    private static OverviewMetricCard BuildCsiMetricCard(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0)
+            return new OverviewMetricCard("CSI", Array.Empty<OverviewMetricRow>());
+        var r = rows[0];
+        return new OverviewMetricCard("CSI", new[]
+        {
+            SingleMetricRow("Total Surveys", Str(r, "total_survey")),
+            DualMetricRow("Customer Treatment", Str(r, "csi_cst_trt"), Str(r, "csi_cst_trt_nat")),
+            DualMetricRow("Repair Experience", Str(r, "csi_rpr_exp"), Str(r, "csi_rpr_exp_nat")),
+            DualMetricRow("Scheduling", Str(r, "csi_sch_tim"), Str(r, "csi_sch_tim_nat")),
+            DualMetricRow("Documentation", Str(r, "csi_doc_chg"), Str(r, "csi_doc_chg_nat")),
+            DualMetricRow("Overall", Str(r, "csi_overall"), Str(r, "csi_overall_nat")),
+        });
+    }
+
+    private static OverviewMetricCard BuildPartsCoopMetricCard(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0)
+            return new OverviewMetricCard("Service & Parts Co-Op", Array.Empty<OverviewMetricRow>());
+        var r = rows[0];
+        return new OverviewMetricCard("Service & Parts Co-Op", new[]
+        {
+            SingleMetricRow("Total Reward", Str(r, "total_reward")),
+            SingleMetricRow("Reward Used", Str(r, "reward_used")),
+            SingleMetricRow("Remaining", Str(r, "reward_remaining")),
+            SingleMetricRow("Ordered", Str(r, "ordered")),
+        });
+    }
+
+    private static OverviewMetricCard BuildIrisMetricCard(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0)
+            return new OverviewMetricCard("IRIS Performance", Array.Empty<OverviewMetricRow>());
+        var r = rows[0];
+        return new OverviewMetricCard("IRIS Performance", new[]
+        {
+            DualMetricRow("YTD Net Utilization", Str(r, "ytd_net_utilization"), Str(r, "National_Avg")),
+            SingleMetricRow("1st Half", Str(r, "1st_half_net_utilization")),
+            SingleMetricRow("2nd Half", Str(r, "2nd_half_net_utilization")),
+        });
+    }
+
+    private static OverviewMetricRow SingleMetricRow(string label, string value) =>
+        new(label, new[] { new OverviewMetricValue("Value", value) });
+
+    private static OverviewMetricRow DualMetricRow(string label, string dealerVal, string natVal) =>
+        new(label, new[]
+        {
+            new OverviewMetricValue("Dealer", dealerVal),
+            new OverviewMetricValue("National", natVal),
+        });
 
     // ── Service-Parts page data ──────────────────────────────────────────────
 
-    public ServicePartsDashboard GetServicePartsData(GeoParams geo, string? date, int reportId)
+    public ServicePartsDashboard GetServicePartsData(DashboardFilters filters)
     {
-        var year = ExtractYear(date);
-        var xmlParms = BuildXmlParms(new Dictionary<string, string?>
-        {
-            ["report_id"] = reportId.ToString(),
-            ["geo_type_id"] = geo.GeoTypeId.ToString(),
-            ["geo_value"] = geo.GeoValue,
-            ["date_type_id"] = year.ToString(),
-            ["user_id"] = "system"
-        });
+        if (string.IsNullOrEmpty(filters.GeoValue))
+            return new ServicePartsDashboard(
+                new MixedChartCard("Parts Sales Overview", Array.Empty<string>(), Array.Empty<string>(),
+                    Array.Empty<MixedChartSeries>(), Array.Empty<ChartLegendItem>()),
+                Array.Empty<StatTile>(), Array.Empty<StatTile>(), Array.Empty<MessagePanel>());
 
-        List<Dictionary<string, object?>> rows;
-        try { rows = ExecuteXmlSp("sp_rpt_dcn_partsales_overview", xmlParms); }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "sp_rpt_dcn_partsales_overview failed");
-            rows = new List<Dictionary<string, object?>>();
-        }
+        var xmlParms = BuildOverviewXmlParms(filters);
+        TryExecute("sp_rpt_dcn_partsales_overview", xmlParms);
 
-        // TODO: map rows to chart series and stat tiles once SP output is confirmed
         var emptyChart = new MixedChartCard(
             "Parts Sales Overview",
             Array.Empty<string>(),
@@ -258,32 +433,21 @@ public sealed class DvtDbService
             Array.Empty<MixedChartSeries>(),
             Array.Empty<ChartLegendItem>());
 
-        return new ServicePartsDashboard(emptyChart, Array.Empty<StatTile>(), Array.Empty<StatTile>(), Array.Empty<MessagePanel>());
+        return new ServicePartsDashboard(emptyChart, Array.Empty<StatTile>(), Array.Empty<StatTile>(),
+            Array.Empty<MessagePanel>());
     }
 
     // ── EV Readiness page data ───────────────────────────────────────────────
 
-    public EvReadinessDashboard GetEvReadinessData(GeoParams geo, string? date, int reportId)
+    public EvReadinessDashboard GetEvReadinessData(DashboardFilters filters)
     {
-        var year = ExtractYear(date);
-        var xmlParms = BuildXmlParms(new Dictionary<string, string?>
-        {
-            ["report_id"] = reportId.ToString(),
-            ["geo_type_id"] = geo.GeoTypeId.ToString(),
-            ["geo_value"] = geo.GeoValue,
-            ["date_type_id"] = year.ToString(),
-            ["user_id"] = "system"
-        });
+        if (string.IsNullOrEmpty(filters.GeoValue))
+            return new EvReadinessDashboard("EV Readiness", "0%", string.Empty, Array.Empty<EvSection>(), string.Empty);
 
-        List<Dictionary<string, object?>> surveyRows;
-        try { surveyRows = ExecuteXmlSp("sp_rpt_dcn_ev_mobile_survey", xmlParms); }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "sp_rpt_dcn_ev_mobile_survey failed");
-            surveyRows = new List<Dictionary<string, object?>>();
-        }
 
-        // TODO: map surveyRows to sections once SP column names are confirmed
+        var xmlParms = BuildOverviewXmlParms(filters);
+        TryExecute("sp_rpt_dcn_ev_mobile_survey", xmlParms);
+
         return new EvReadinessDashboard(
             ProgressLabel: "EV Readiness",
             ProgressValue: "0%",
@@ -294,27 +458,14 @@ public sealed class DvtDbService
 
     // ── Sales page data ──────────────────────────────────────────────────────
 
-    public SalesDashboard GetSalesData(GeoParams geo, string? date, int reportId)
+    public SalesDashboard GetSalesData(DashboardFilters filters)
     {
-        var year = ExtractYear(date);
-        var xmlParms = BuildXmlParms(new Dictionary<string, string?>
-        {
-            ["report_id"] = reportId.ToString(),
-            ["geo_type_id"] = geo.GeoTypeId.ToString(),
-            ["geo_value"] = geo.GeoValue,
-            ["date_type_id"] = year.ToString(),
-            ["user_id"] = "system"
-        });
+        if (string.IsNullOrEmpty(filters.GeoValue))
+            return new SalesDashboard(Array.Empty<SalesRow>(), Array.Empty<MessagePanel>());
 
-        List<Dictionary<string, object?>> rows;
-        try { rows = ExecuteXmlSp("sp_rpt_dcn_sales_total", xmlParms); }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "sp_rpt_dcn_sales_total failed");
-            rows = new List<Dictionary<string, object?>>();
-        }
 
-        // TODO: map rows to SalesRow[] once SP column structure is confirmed
+        var xmlParms = BuildOverviewXmlParms(filters);
+        TryExecute("sp_rpt_dcn_sales_total", xmlParms);
         return new SalesDashboard(Array.Empty<SalesRow>(), Array.Empty<MessagePanel>());
     }
 
@@ -362,8 +513,6 @@ public sealed class DvtDbService
     public IReadOnlyList<KpiRecord> GetKpis(
         GeoParams geo, string? date1, string? date2, int? deptId, int reportId)
     {
-        // report_id determines use_kpi via rpt_report.parm2 — ensure the configured
-        // PackageKpi report_id has parm2 set to 1 in the rpt_report table.
         var xmlParms = BuildXmlParms(new Dictionary<string, string?>
         {
             ["report_id"] = reportId.ToString(),
@@ -376,8 +525,6 @@ public sealed class DvtDbService
         });
 
         var rows = ExecuteXmlSp("sp_rpt_dcn_package", xmlParms);
-
-        // Only rows that have a kpi_id represent KPI records
         return rows
             .Where(r => r.ContainsKey("kpi_id") && r["kpi_id"] is not null)
             .Select(MapToKpiRecord)
@@ -414,7 +561,6 @@ public sealed class DvtDbService
     {
         using var conn = OpenConnection();
 
-        // Get the package row for this kpi
         var xmlParms = BuildXmlParms(new Dictionary<string, string?>
         {
             ["report_id"] = _config.GetValue<int>("ReportIds:PackageKpi").ToString(),
@@ -430,11 +576,10 @@ public sealed class DvtDbService
 
         if (kpiRow is null) return null;
 
-        // Load comments from dcn.kpi_msg
         var comments = conn.Query<KpiMsgRow>(
-            "SELECT id Id, pkg_id PkgId, action_id ActionId, kpi_id KpiId, msg Msg, update_date UpdateDate " +
-            "FROM dcn.kpi_msg WHERE kpi_id = @kpiId AND pkg_id = @pkgId ORDER BY update_date",
-            new { kpiId = int.Parse(kpiId), pkgId = int.Parse(pkgId) })
+                "SELECT id Id, pkg_id PkgId, action_id ActionId, kpi_id KpiId, msg Msg, update_date UpdateDate " +
+                "FROM dcn.kpi_msg WHERE kpi_id = @kpiId AND pkg_id = @pkgId ORDER BY update_date",
+                new { kpiId = int.Parse(kpiId), pkgId = int.Parse(pkgId) })
             .SelectMany(ParseComment)
             .ToList();
 
@@ -461,7 +606,6 @@ public sealed class DvtDbService
 
     public void AddKpiComment(int pkgId, int actionId, int kpiId, string body, string authorName, string authorRole)
     {
-        // Encode author info in the message text since sp_save_pkg_msg stores free-form text
         var formatted = $"[{authorName} | {authorRole}] {body}";
         using var conn = OpenConnection();
         conn.Execute(
@@ -483,20 +627,15 @@ public sealed class DvtDbService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static int ExtractYear(string? date)
-    {
-        if (string.IsNullOrEmpty(date)) return DateTime.Now.Year;
-        if (DateTime.TryParse(date, out var dt)) return dt.Year;
-        return DateTime.Now.Year;
-    }
-
     private static string BuildInitials(string userId)
     {
         if (string.IsNullOrEmpty(userId)) return "?";
         var parts = userId.Split('@')[0].Split('.');
         return parts.Length >= 2
             ? $"{char.ToUpper(parts[0][0])}{char.ToUpper(parts[1][0])}"
-            : userId.Length > 0 ? $"{char.ToUpper(userId[0])}" : "?";
+            : userId.Length > 0
+                ? $"{char.ToUpper(userId[0])}"
+                : "?";
     }
 
     private static readonly string[] _tones = { "indigo", "teal", "emerald", "amber" };
@@ -509,15 +648,12 @@ public sealed class DvtDbService
 
     private static string DetermineAchieved(double kpi1, double kpi2, string kpiUnit)
     {
-        // For percentage-type KPIs, higher is generally better
-        // For flagged KPIs (kpi = -1), lower (closer to 0) is better
         if (kpi1 < 0) return kpi2 >= 0 ? "Yes" : "No";
         return kpi2 >= kpi1 ? "Yes" : "No";
     }
 
     private static IReadOnlyList<KpiComment> ParseComment(KpiMsgRow row)
     {
-        // msg format: "[date] text<br>" or "[Author | Role] text<br>"
         var comments = new List<KpiComment>();
         var parts = row.Msg.Split("<br>", StringSplitOptions.RemoveEmptyEntries);
         var index = 0;
@@ -529,7 +665,6 @@ public sealed class DvtDbService
             string authorName = "ICTA User", authorRole = "District Manager", body = trimmed;
             string createdAt = row.UpdateDate.ToString("yyyy-MM-ddTHH:mm:ss");
 
-            // Try to parse "[Author | Role] text" format
             if (trimmed.StartsWith('['))
             {
                 var closeBracket = trimmed.IndexOf(']');
@@ -538,10 +673,8 @@ public sealed class DvtDbService
                     var meta = trimmed[1..closeBracket];
                     body = trimmed[(closeBracket + 1)..].Trim();
 
-                    // Try "[date]" format
                     if (DateTime.TryParse(meta, out var parsedDate))
                         createdAt = parsedDate.ToString("yyyy-MM-ddTHH:mm:ss");
-                    // Try "[Author | Role]" format
                     else if (meta.Contains('|'))
                     {
                         var metaParts = meta.Split('|', 2);
@@ -558,6 +691,7 @@ public sealed class DvtDbService
                 Body: body,
                 CreatedAt: createdAt));
         }
+
         return comments;
     }
 }
