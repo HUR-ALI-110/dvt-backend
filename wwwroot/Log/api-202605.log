@@ -55,3 +55,134 @@ ClientConnectionId:00000000-0000-0000-0000-000000000000
 2026-05-11 18:20:31.027 +05:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 304 in 1.8583 ms
 2026-05-11 18:20:31.031 +05:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 304 in 0.1720 ms
 2026-05-11 18:20:31.304 +05:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 78.1844 ms
+2026-05-11 07:51:33.960 -06:00 [INF] HTTP GET /swagger/index.html responded 200 in 863.3113 ms
+2026-05-11 07:51:35.279 -06:00 [INF] HTTP GET /swagger/index.css responded 200 in 289.7455 ms
+2026-05-11 07:51:35.977 -06:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 200 in 208.8742 ms
+2026-05-11 07:51:35.944 -06:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 631.0893 ms
+2026-05-11 07:51:35.318 -06:00 [INF] HTTP GET /swagger/swagger-ui.css responded 200 in 397.3923 ms
+2026-05-11 07:51:35.429 -06:00 [INF] HTTP GET /swagger/index.js responded 200 in 23.7484 ms
+2026-05-11 07:51:38.104 -06:00 [INF] HTTP GET /swagger/favicon-32x32.png responded 200 in 38.4226 ms
+2026-05-11 07:51:39.246 -06:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 1386.8617 ms
+2026-05-11 07:52:15.586 -06:00 [INF] API call GET /dashboard with parameters {}
+2026-05-11 07:52:19.776 -06:00 [INF] HTTP GET /dashboard responded 200 in 4308.5519 ms
+2026-05-11 10:44:48.931 -06:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 8.8706 ms
+2026-05-11 23:43:46.935 -06:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 8.3358 ms
+2026-05-12 07:06:17.714 -06:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 178.0857 ms
+2026-05-12 07:35:20.271 -06:00 [INF] HTTP GET / responded 404 in 97.4892 ms
+2026-05-12 07:35:27.959 -06:00 [INF] HTTP GET /swagger responded 301 in 10.9803 ms
+2026-05-12 07:35:28.559 -06:00 [INF] HTTP GET /swagger/index.html responded 200 in 43.5909 ms
+2026-05-12 07:35:29.145 -06:00 [INF] HTTP GET /swagger/swagger-ui.css responded 200 in 5.2681 ms
+2026-05-12 07:35:29.357 -06:00 [INF] HTTP GET /swagger/index.css responded 200 in 1.5806 ms
+2026-05-12 07:35:29.362 -06:00 [INF] HTTP GET /swagger/index.js responded 200 in 0.4676 ms
+2026-05-12 07:35:29.388 -06:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 200 in 16.9873 ms
+2026-05-12 07:35:29.448 -06:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 75.7181 ms
+2026-05-12 07:35:31.035 -06:00 [INF] HTTP GET /swagger/index.js responded 200 in 5.5907 ms
+2026-05-12 07:35:31.026 -06:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 200 in 0.7387 ms
+2026-05-12 07:35:31.341 -06:00 [INF] HTTP GET /swagger/favicon-32x32.png responded 200 in 12.8549 ms
+2026-05-12 07:35:31.369 -06:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 87.8974 ms
+2026-05-12 07:35:31.418 -06:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 22.7456 ms
+2026-05-12 07:35:53.390 -06:00 [INF] API call GET /dashboard with parameters {}
+2026-05-12 07:35:54.050 -06:00 [INF] HTTP GET /dashboard responded 200 in 662.8819 ms
+2026-05-12 07:44:06.713 -06:00 [INF] API call GET /dashboard with parameters {}
+2026-05-12 07:44:11.186 -06:00 [INF] HTTP GET /dashboard responded 200 in 4521.8234 ms
+2026-05-12 07:50:32.803 -06:00 [INF] API call GET /dashboard with parameters {}
+2026-05-12 07:50:36.660 -06:00 [INF] HTTP GET /dashboard responded 200 in 3953.4809 ms
+2026-05-12 10:21:09.455 -06:00 [INF] API call GET /dashboard with parameters {}
+2026-05-12 10:21:09.809 -06:00 [INF] HTTP GET /dashboard responded 200 in 356.3626 ms
+2026-05-12 15:03:57.556 -06:00 [INF] HTTP OPTIONS /api/admin/login responded 204 in 7.0696 ms
+2026-05-12 15:04:04.250 -06:00 [INF] HTTP OPTIONS /api/admin/login responded 204 in 0.4201 ms
+2026-05-12 15:04:12.007 -06:00 [INF] HTTP OPTIONS /api/admin/login responded 204 in 0.0854 ms
+2026-05-12 15:04:17.281 -06:00 [INF] HTTP OPTIONS /api/admin/login responded 204 in 0.1017 ms
+2026-05-12 23:14:54.675 -06:00 [INF] HTTP GET / responded 404 in 4.5289 ms
+2026-05-12 23:14:59.198 -06:00 [INF] HTTP GET / responded 404 in 0.3778 ms
+2026-05-12 23:16:40.569 -06:00 [INF] HTTP GET / responded 404 in 43.9539 ms
+2026-05-12 23:17:29.529 -06:00 [INF] HTTP GET / responded 404 in 2.6361 ms
+2026-05-12 23:17:38.950 -06:00 [INF] HTTP GET /swagger/index.html responded 304 in 89.9590 ms
+2026-05-12 23:17:39.513 -06:00 [INF] HTTP GET /swagger/swagger-ui.css responded 304 in 12.7785 ms
+2026-05-12 23:17:39.718 -06:00 [INF] HTTP GET /swagger/index.css responded 304 in 0.5404 ms
+2026-05-12 23:17:39.741 -06:00 [INF] HTTP GET /swagger/index.js responded 304 in 1.1100 ms
+2026-05-12 23:17:39.747 -06:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 304 in 5.4415 ms
+2026-05-12 23:17:39.850 -06:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 110.4322 ms
+2026-05-12 23:17:41.299 -06:00 [INF] HTTP GET /swagger/index.js responded 304 in 1.8177 ms
+2026-05-12 23:17:41.424 -06:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 304 in 1.0669 ms
+2026-05-12 23:17:44.232 -06:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 3.5048 ms
+2026-05-12 23:17:45.010 -06:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 601.6921 ms
+2026-05-12 23:33:52.120 -06:00 [INF] API call GET /dashboard with parameters {}
+2026-05-12 23:33:55.637 -06:00 [INF] HTTP GET /dashboard responded 200 in 3601.0790 ms
+2026-05-13 10:54:18.033 -06:00 [INF] API call GET /dashboard with parameters {}
+2026-05-13 10:54:18.997 -06:00 [INF] HTTP GET /swagger/index.html responded 304 in 746.2434 ms
+2026-05-13 10:54:20.139 -06:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 304 in 80.4881 ms
+2026-05-13 10:54:20.027 -06:00 [INF] HTTP GET /swagger/swagger-ui.css responded 304 in 1.2707 ms
+2026-05-13 10:54:20.127 -06:00 [INF] HTTP GET /swagger/index.js responded 304 in 67.7811 ms
+2026-05-13 10:54:20.010 -06:00 [INF] HTTP GET /swagger/index.css responded 304 in 10.4614 ms
+2026-05-13 10:54:20.349 -06:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 333.3366 ms
+2026-05-13 10:54:21.367 -06:00 [INF] HTTP GET /swagger/swagger-ui-bundle.js responded 200 in 28.1773 ms
+2026-05-13 10:54:21.374 -06:00 [INF] HTTP GET /swagger/swagger-ui-standalone-preset.js responded 304 in 0.0989 ms
+2026-05-13 10:54:21.374 -06:00 [INF] HTTP GET /swagger/index.js responded 304 in 0.3549 ms
+2026-05-13 10:54:21.933 -06:00 [WRN] sp_rpt_dcn_truck_sales_objectives failed
+Microsoft.Data.SqlClient.SqlException (0x80131904): Incorrect syntax near ')'.
+Incorrect syntax near the keyword 'union'.
+Incorrect syntax near the keyword 'group'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryConsumeMetaData()
+   at Microsoft.Data.SqlClient.SqlDataReader.get_MetaData()
+   at Microsoft.Data.SqlClient.SqlCommand.FinishExecuteReader(SqlDataReader ds, RunBehavior runBehavior, String resetOptionsString, Boolean isInternal, Boolean forDescribeParameterEncryption, Boolean shouldCacheForAlwaysEncrypted)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReaderTds(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, Boolean isAsync, Int32 timeout, Task& task, Boolean asyncWrite, Boolean inRetry, SqlDataReader ds, Boolean describeParameterEncryptionRequest)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, TaskCompletionSource`1 completion, Int32 timeout, Task& task, Boolean& usedCache, Boolean asyncWrite, Boolean inRetry, String method)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, String method)
+   at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader(CommandBehavior behavior)
+   at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader()
+   at ICTA_DVT.Services.DvtDbService.ExecuteXmlSp(String spName, String xmlParms, String debug) in C:\Users\lshears\source\repos\dvt-backend\Services\DvtDbService.cs:line 71
+   at ICTA_DVT.Services.DvtDbService.TryExecute(String spName, String xmlParms) in C:\Users\lshears\source\repos\dvt-backend\Services\DvtDbService.cs:line 84
+ClientConnectionId:9b31fd7b-45cc-4f2f-b200-ee355d4c2b92
+Error Number:102,State:1,Class:15
+2026-05-13 10:54:22.291 -06:00 [WRN] sp_rpt_dcn_partsales_overview failed
+Microsoft.Data.SqlClient.SqlException (0x80131904): Incorrect syntax near ')'.
+Incorrect syntax near ')'.
+Incorrect syntax near the keyword 'and'.
+Incorrect syntax near the keyword 'and'.
+Incorrect syntax near the keyword 'and'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryConsumeMetaData()
+   at Microsoft.Data.SqlClient.SqlDataReader.get_MetaData()
+   at Microsoft.Data.SqlClient.SqlCommand.FinishExecuteReader(SqlDataReader ds, RunBehavior runBehavior, String resetOptionsString, Boolean isInternal, Boolean forDescribeParameterEncryption, Boolean shouldCacheForAlwaysEncrypted)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReaderTds(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, Boolean isAsync, Int32 timeout, Task& task, Boolean asyncWrite, Boolean inRetry, SqlDataReader ds, Boolean describeParameterEncryptionRequest)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, TaskCompletionSource`1 completion, Int32 timeout, Task& task, Boolean& usedCache, Boolean asyncWrite, Boolean inRetry, String method)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, String method)
+   at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader(CommandBehavior behavior)
+   at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader()
+   at ICTA_DVT.Services.DvtDbService.ExecuteXmlSp(String spName, String xmlParms, String debug) in C:\Users\lshears\source\repos\dvt-backend\Services\DvtDbService.cs:line 71
+   at ICTA_DVT.Services.DvtDbService.TryExecute(String spName, String xmlParms) in C:\Users\lshears\source\repos\dvt-backend\Services\DvtDbService.cs:line 84
+ClientConnectionId:9b31fd7b-45cc-4f2f-b200-ee355d4c2b92
+Error Number:102,State:1,Class:15
+2026-05-13 10:54:22.594 -06:00 [INF] HTTP GET /swagger/v1/swagger.json responded 200 in 1316.9982 ms
+2026-05-13 10:54:22.624 -06:00 [WRN] sp_rpt_dcn_csi_overview failed
+Microsoft.Data.SqlClient.SqlException (0x80131904): Incorrect syntax near ')'.
+Incorrect syntax near 'b'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryConsumeMetaData()
+   at Microsoft.Data.SqlClient.SqlDataReader.get_MetaData()
+   at Microsoft.Data.SqlClient.SqlCommand.FinishExecuteReader(SqlDataReader ds, RunBehavior runBehavior, String resetOptionsString, Boolean isInternal, Boolean forDescribeParameterEncryption, Boolean shouldCacheForAlwaysEncrypted)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReaderTds(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, Boolean isAsync, Int32 timeout, Task& task, Boolean asyncWrite, Boolean inRetry, SqlDataReader ds, Boolean describeParameterEncryptionRequest)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, TaskCompletionSource`1 completion, Int32 timeout, Task& task, Boolean& usedCache, Boolean asyncWrite, Boolean inRetry, String method)
+   at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, String method)
+   at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader(CommandBehavior behavior)
+   at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader()
+   at ICTA_DVT.Services.DvtDbService.ExecuteXmlSp(String spName, String xmlParms, String debug) in C:\Users\lshears\source\repos\dvt-backend\Services\DvtDbService.cs:line 71
+   at ICTA_DVT.Services.DvtDbService.TryExecute(String spName, String xmlParms) in C:\Users\lshears\source\repos\dvt-backend\Services\DvtDbService.cs:line 84
+ClientConnectionId:9b31fd7b-45cc-4f2f-b200-ee355d4c2b92
+Error Number:102,State:1,Class:15
+2026-05-13 10:54:23.378 -06:00 [INF] HTTP GET /dashboard responded 200 in 5444.1789 ms
+2026-05-13 10:58:42.388 -06:00 [INF] API call GET /dashboard with parameters {"query.report_id":"716","query.geo_type_id":"1","query.geo_value":"3719","query.geo_title":"5 CORNERS ISUZU TRUCK AND (64721)","query.date_type_id":"11","query.time_title":"2026YTD"}
+2026-05-13 10:58:43.799 -06:00 [INF] HTTP GET /dashboard responded 200 in 1507.0907 ms
+2026-05-13 13:35:07.430 -06:00 [INF] API call GET /dashboard with parameters {"query.report_id":"716","query.geo_type_id":"1","query.geo_value":"3719","query.geo_title":"5 CORNERS ISUZU TRUCK AND (64721)","query.date_type_id":"11","query.time_title":"2026YTD"}
+2026-05-13 13:35:12.069 -06:00 [INF] HTTP GET /dashboard responded 200 in 4724.1037 ms
