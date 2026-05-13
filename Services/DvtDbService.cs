@@ -100,11 +100,10 @@ public sealed class DvtDbService
         var dealers = conn.Query<LocationRow>(
             "SELECT location_id LocationId, location_code LocationCode, location_name LocationName, " +
             "district1 District1, district2 District2, '' Region " +
-            "FROM dim_location WHERE location_id > 0 ORDER BY location_name").ToList();
+            "FROM dim_location WHERE location_id > 0 AND date_close IS NULL ORDER BY location_name").ToList();
 
         var dealerOptions = dealers
             .Select(d => new FilterOption(d.LocationId.ToString(), $"{d.LocationName} ({d.LocationCode})"))
-            .Prepend(new FilterOption("all-dealer", "All Dealers"))
             .ToList();
 
         var districtOptions = dealers
