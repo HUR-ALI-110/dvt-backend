@@ -192,10 +192,10 @@ public sealed class DvtDbService
         var r = rows[0];
         return new[]
         {
-            new Certification("COE Certified",     IsActive(Str(r, "coe_cert"))      ? "complete" : "pending"),
-            new Certification("Isuzu Connect",     IsActive(Str(r, "isuzu_connect")) ? "complete" : "pending"),
-            new Certification("Cummins Certified", IsActive(Str(r, "cummins_cert"))  ? "complete" : "pending"),
-            new Certification("Allison Certified", IsActive(Str(r, "allison_cert"))  ? "complete" : "pending"),
+            new Certification("COE Certified", IsActive(Str(r, "coe_cert")) ? "complete" : "pending"),
+            new Certification("Isuzu Connect", IsActive(Str(r, "isuzu_connect")) ? "complete" : "pending"),
+            new Certification("Cummins Certified", IsActive(Str(r, "cummins_cert")) ? "complete" : "pending"),
+            new Certification("Allison Certified", IsActive(Str(r, "allison_cert")) ? "complete" : "pending"),
         };
     }
 
@@ -216,20 +216,20 @@ public sealed class DvtDbService
         var xmlParms = BuildOverviewXmlParms(filters);
 
         // sp_rpt_dcn_personel drives both people sections (dealer personnel + winner's circle)
-        var personnelRows = TryExecute("sp_rpt_dcn_personel",               xmlParms);
-        var ichibanRows   = TryExecute("sp_rpt_dcn_ichiban_overview",       xmlParms);
-        var vehicleRows   = TryExecute("sp_rpt_dcn_vehicleinfo_overview",   xmlParms);
-        var coopRows      = TryExecute("sp_rpt_dcn_coop_trucks",            xmlParms);
-        var objRows       = TryExecute("sp_rpt_dcn_truck_sales_objectives", xmlParms);
-        var partSalesRows = TryExecute("sp_rpt_dcn_partsales_overview",     xmlParms);
-        var csiRows       = TryExecute("sp_rpt_dcn_csi_overview",           xmlParms);
-        var partCoopRows  = TryExecute("sp_rpt_dcn_parts_coop_overview",    xmlParms);
-        var irisRows      = TryExecute("sp_rpt_dcn_iris_overview",          xmlParms);
+        var personnelRows = TryExecute("sp_rpt_dcn_personel", xmlParms);
+        var ichibanRows = TryExecute("sp_rpt_dcn_ichiban_overview", xmlParms);
+        var vehicleRows = TryExecute("sp_rpt_dcn_vehicleinfo_overview", xmlParms);
+        var coopRows = TryExecute("sp_rpt_dcn_coop_trucks", xmlParms);
+        var objRows = TryExecute("sp_rpt_dcn_truck_sales_objectives", xmlParms);
+        var partSalesRows = TryExecute("sp_rpt_dcn_partsales_overview", xmlParms);
+        var csiRows = TryExecute("sp_rpt_dcn_csi_overview", xmlParms);
+        var partCoopRows = TryExecute("sp_rpt_dcn_parts_coop_overview", xmlParms);
+        var irisRows = TryExecute("sp_rpt_dcn_iris_overview", xmlParms);
 
         return new OverviewDashboard(
-            LeftColumnTitle:   "Personnel",
+            LeftColumnTitle: "Personnel",
             CenterColumnTitle: "Performance",
-            RightColumnTitle:  "Metrics",
+            RightColumnTitle: "Metrics",
             PeopleSections: new[]
             {
                 BuildDealerPersonnelSection(personnelRows),
@@ -263,14 +263,14 @@ public sealed class DvtDbService
         if (string.IsNullOrEmpty(warrantyAdmin)) warrantyAdmin = Str(first, "warranty_administrator");
 
         var personRows = new[]
-        {
-            new PersonRow(Role: "Dealer Principal",      Name: Str(first, "dealer_principal")),
-            new PersonRow(Role: "Executive Manager",     Name: Str(first, "executive_manager")),
-            new PersonRow(Role: "ICS Admin",             Name: Str(first, "ics_admin")),
-            new PersonRow(Role: "Warranty Administrator", Name: warrantyAdmin),
-        }
-        .Where(pr => !string.IsNullOrEmpty(pr.Name))
-        .ToList();
+            {
+                new PersonRow(Role: "Dealer Principal", Name: Str(first, "dealer_principal")),
+                new PersonRow(Role: "Executive Manager", Name: Str(first, "executive_manager")),
+                new PersonRow(Role: "ICS Admin", Name: Str(first, "ics_admin")),
+                new PersonRow(Role: "Warranty Administrator", Name: warrantyAdmin),
+            }
+            .Where(pr => !string.IsNullOrEmpty(pr.Name))
+            .ToList();
 
         return new OverviewPeopleSection("Dealer Personnel", personRows);
     }
@@ -278,43 +278,62 @@ public sealed class DvtDbService
     private static readonly HashSet<string> _winnerCategories =
         new(StringComparer.OrdinalIgnoreCase) { "parts_managers", "svc_managers", "sales_managers" };
 
+    private static string FindPersonnelCategory(Dictionary<string, object?> row)
+    {
+        foreach (var v in row.Values)
+        {
+            var s = v?.ToString() ?? string.Empty;
+            if (_winnerCategories.Contains(s)) return s;
+        }
+
+        return string.Empty;
+    }
+
     private static OverviewPeopleSection BuildWinnersCircleSection(
         List<Dictionary<string, object?>> personnelRows,
         List<Dictionary<string, object?>> ichibanRows)
     {
         var personRows = personnelRows
-            .Where(r => _winnerCategories.Contains(Str(r, "category")))
-            .Select(r =>
+            .Select(r => (Row: r, Category: FindPersonnelCategory(r)))
+            .Where(x => !string.IsNullOrEmpty(x.Category))
+            .Select(x =>
             {
-                var role = Str(r, "category") switch
+                var r = x.Row;
+                var category = x.Category;
+                var role = category switch
                 {
                     "parts_managers" => "Parts Manager",
-                    "svc_managers"   => "Service Manager",
+                    "svc_managers" => "Service Manager",
                     "sales_managers" => "Sales Manager",
-                    var other        => other
+                    var other => other
                 };
 
-                var level      = Str(r, "crnt_level");
-                var rank       = Str(r, "rank");
-                var natRank    = Str(r, "national_rank");
+                var level = Str(r, "crnt_level");
+                var rank = Str(r, "rank");
+                var natRank = Str(r, "national_rank");
                 var partsGroup = Str(r, "parts_group");
 
-                var rankDisplay = (rank, natRank) switch
+                var (al, av, el, ev) = category switch
                 {
-                    ("", "") => null,
-                    (_, "")  => rank,
-                    ("", _)  => natRank,
-                    _        => $"{rank} / {natRank}"
+                    "sales_managers" => (
+                        "Current Lvl", string.IsNullOrEmpty(level) ? "No Data" : level,
+                        "Rank", string.IsNullOrEmpty(rank) ? "N/A" : rank),
+                    "svc_managers" => (
+                        "Group", string.IsNullOrEmpty(partsGroup) ? "N/A" : partsGroup,
+                        "Rank", string.IsNullOrEmpty(rank) ? "N/A" : rank),
+                    "parts_managers" => (
+                        "National Rank", string.IsNullOrEmpty(natRank) ? "N/A" : natRank,
+                        (string?)null, (string?)null),
+                    _ => ((string?)null, (string?)null, (string?)null, (string?)null)
                 };
 
                 return new PersonRow(
-                    Role:             role,
-                    Name:             Str(r, "Person"),
-                    Secondary:        string.IsNullOrEmpty(partsGroup) ? null : partsGroup,
-                    AccentLabel:      string.IsNullOrEmpty(level)  ? null : "Level",
-                    AccentValue:      string.IsNullOrEmpty(level)  ? null : level,
-                    ExtraAccentLabel: rankDisplay is null ? null : "Rank",
-                    ExtraAccentValue: rankDisplay);
+                    Role: role,
+                    Name: Str(r, "Person"),
+                    AccentLabel: al,
+                    AccentValue: av,
+                    ExtraAccentLabel: el,
+                    ExtraAccentValue: ev);
             })
             .Where(pr => !string.IsNullOrEmpty(pr.Name))
             .ToList();

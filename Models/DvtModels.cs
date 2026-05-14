@@ -11,13 +11,20 @@ public record GeoParams(int GeoTypeId, string GeoValue);
 public record FilterOption(string Value, string Label);
 
 public record DashboardFilters(
-    [property: JsonPropertyName("report_id")]    string ReportId,
-    [property: JsonPropertyName("report_title")] string ReportTitle,
-    [property: JsonPropertyName("geo_type_id")]  string GeoTypeId,
-    [property: JsonPropertyName("geo_value")]    string GeoValue,
-    [property: JsonPropertyName("geo_title")]    string GeoTitle,
-    [property: JsonPropertyName("date_type_id")] string DateTypeId,
-    [property: JsonPropertyName("time_title")]   string TimeTitle);
+    [property: JsonPropertyName("report_id")]
+    string ReportId,
+    [property: JsonPropertyName("report_title")]
+    string ReportTitle,
+    [property: JsonPropertyName("geo_type_id")]
+    string GeoTypeId,
+    [property: JsonPropertyName("geo_value")]
+    string GeoValue,
+    [property: JsonPropertyName("geo_title")]
+    string GeoTitle,
+    [property: JsonPropertyName("date_type_id")]
+    string DateTypeId,
+    [property: JsonPropertyName("time_title")]
+    string TimeTitle);
 
 public record ShellNavItem(string Id, string Label, string Href, string Kind);
 
@@ -58,7 +65,9 @@ public record PersonRow(
     string? AccentLabel = null,
     string? AccentValue = null,
     string? ExtraAccentLabel = null,
-    string? ExtraAccentValue = null);
+    string? ExtraAccentValue = null,
+    string? Accent2Label = null,
+    string? Accent2Value = null);
 
 public record OverviewPeopleSection(
     string Title,
@@ -227,7 +236,10 @@ public record KpisResponse(IReadOnlyList<KpiRecord> Kpis);
 
 public record KpiDetailResponse(KpiDetailRecord Kpi);
 
-public record AddKpiCommentRequest(string Body, string AuthorName = "ICTA User", string AuthorRole = "District Manager");
+public record AddKpiCommentRequest(
+    string Body,
+    string AuthorName = "ICTA User",
+    string AuthorRole = "District Manager");
 
 public record AddKpiCommentResponse(KpiDetailRecord Kpi);
 
@@ -269,6 +281,12 @@ public record PackageRow(
     int? KpiStatus = null,
     string? KpiUnit = null);
 
-public record LocationRow(int LocationId, string LocationCode, string LocationName, string District1, string District2, string? Region);
+public record LocationRow(
+    int LocationId,
+    string LocationCode,
+    string LocationName,
+    string District1,
+    string District2,
+    string? Region);
 
 public record KpiMsgRow(int Id, int PkgId, int ActionId, int KpiId, string Msg, DateTime UpdateDate);
