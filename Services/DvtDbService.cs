@@ -94,6 +94,39 @@ public sealed class DvtDbService
         }
     }
 
+    // sp_rpt_csi_summary requires @request_id=198 as a separate SQL parameter (not in XML parms)
+    private List<Dictionary<string, object?>> ExecuteCsiScoresSp(string xmlParms)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = new SqlCommand("sp_rpt_csi_summary", conn)
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandTimeout = 60
+            };
+            cmd.Parameters.Add("@parms", SqlDbType.Xml).Value = xmlParms;
+            cmd.Parameters.AddWithValue("@debug", "n");
+            cmd.Parameters.AddWithValue("@request_id", 198);
+
+            var results = new List<Dictionary<string, object?>>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < reader.FieldCount; i++)
+                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                results.Add(row);
+            }
+            return results;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "sp_rpt_csi_summary failed");
+            return new List<Dictionary<string, object?>>();
+        }
+    }
+
     private static T? Col<T>(Dictionary<string, object?> row, string key)
     {
         if (!row.TryGetValue(key, out var v) || v is null) return default;
@@ -223,7 +256,8 @@ public sealed class DvtDbService
         var objRows = TryExecute("sp_rpt_dcn_truck_sales_objectives", xmlParms);
         var demosRows = TryExecute("sp_rpt_dcn_Demos_overview", xmlParms);
         var partSalesRows = TryExecute("sp_rpt_dcn_partsales_overview", xmlParms);
-        var csiRows = TryExecute("sp_rpt_dcn_csi_overview", xmlParms);
+        var csiRows      = TryExecute("sp_rpt_dcn_csi_overview", xmlParms);
+        var csiScoreRows = ExecuteCsiScoresSp(xmlParms);
         var partCoopRows = TryExecute("sp_rpt_dcn_parts_coop_overview", xmlParms);
         var irisRows = TryExecute("sp_rpt_dcn_iris_overview", xmlParms);
 
@@ -246,7 +280,7 @@ public sealed class DvtDbService
             MetricCards: new[]
             {
                 BuildPartSalesMetricCard(partSalesRows),
-                BuildCsiMetricCard(csiRows),
+                BuildCsiMetricCard(csiRows, csiScoreRows),
                 BuildPartsCoopMetricCard(partCoopRows),
                 BuildIrisMetricCard(irisRows),
             });
@@ -472,20 +506,68 @@ public sealed class DvtDbService
         return new OverviewMetricCard("Dealer Parts Purchasing", metricRows);
     }
 
-    private static OverviewMetricCard BuildCsiMetricCard(List<Dictionary<string, object?>> rows)
+    private static OverviewMetricCard BuildCsiMetricCard(
+        List<Dictionary<string, object?>> csiRows,
+        List<Dictionary<string, object?>> csiScoreRows)
     {
-        if (rows.Count == 0)
+        // Use sp_rpt_csi_summary data when available — matches client RDL exactly.
+        // Dealer = g_avg, National = n_avg, looked up by question_text.
+        if (csiScoreRows.Count > 0)
+        {
+            var totalSurveys = Str(csiScoreRows[0], "tot_num");
+
+            const string ct  = "Customer Treatment";
+            const string cre = "Customer Repair Expectations";
+            const string st  = "Schedule & Timing";
+            const string doc = "Documentation on Repairs & Charges";
+
+            string G(string q) => CsiLookup(csiScoreRows, q, "g_avg");
+            string N(string q) => CsiLookup(csiScoreRows, q, "n_avg");
+
+            return new OverviewMetricCard("CSI", new[]
+            {
+                SingleMetricRow("Total Surveys",     totalSurveys),
+                DualMetricRow("Customer Treatment",  G(ct),  N(ct)),
+                DualMetricRow("Repair Experience",   G(cre), N(cre)),
+                DualMetricRow("Schedule & Timing",   G(st),  N(st)),
+                DualMetricRow("Documentation",       G(doc), N(doc)),
+                DualMetricRow("Total",               CsiAvg(G(ct), G(cre), G(st), G(doc)),
+                                                     CsiAvg(N(ct), N(cre), N(st), N(doc))),
+            });
+        }
+
+        // Fallback: sp_rpt_dcn_csi_overview
+        if (csiRows.Count == 0)
             return new OverviewMetricCard("CSI", Array.Empty<OverviewMetricRow>());
-        var r = rows[0];
+        var r = csiRows[0];
         return new OverviewMetricCard("CSI", new[]
         {
-            SingleMetricRow("Total Surveys", Str(r, "total_survey")),
-            DualMetricRow("Customer Treatment", Str(r, "csi_cst_trt"), Str(r, "csi_cst_trt_nat")),
-            DualMetricRow("Repair Experience", Str(r, "csi_rpr_exp"), Str(r, "csi_rpr_exp_nat")),
-            DualMetricRow("Scheduling", Str(r, "csi_sch_tim"), Str(r, "csi_sch_tim_nat")),
-            DualMetricRow("Documentation", Str(r, "csi_doc_chg"), Str(r, "csi_doc_chg_nat")),
-            DualMetricRow("Overall", Str(r, "csi_overall"), Str(r, "csi_overall_nat")),
+            SingleMetricRow("Total Surveys",     Str(r, "total_survey")),
+            DualMetricRow("Customer Treatment",  Str(r, "csi_cst_trt"),  Str(r, "csi_cst_trt_nat")),
+            DualMetricRow("Repair Experience",   Str(r, "csi_rpr_exp"),  Str(r, "csi_rpr_exp_nat")),
+            DualMetricRow("Schedule & Timing",   Str(r, "csi_sch_tim"),  Str(r, "csi_sch_tim_nat")),
+            DualMetricRow("Documentation",       Str(r, "csi_doc_chg"),  Str(r, "csi_doc_chg_nat")),
+            DualMetricRow("Total",               Str(r, "csi_overall"),  Str(r, "csi_tot_nat")),
         });
+    }
+
+    private static string CsiLookup(List<Dictionary<string, object?>> rows, string questionText, string field)
+    {
+        var row = rows.FirstOrDefault(r =>
+            string.Equals(Str(r, "question_text"), questionText, StringComparison.OrdinalIgnoreCase));
+        if (row == null || !row.ContainsKey(field)) return string.Empty;
+        var val = Col<double>(row, field);
+        return val == 0 ? string.Empty : Math.Round(val, 1).ToString();
+    }
+
+    private static string CsiAvg(params string[] vals)
+    {
+        var doubles = vals
+            .Select(v => { double.TryParse(v, out var d); return (ok: d > 0, d); })
+            .Where(x => x.ok)
+            .Select(x => x.d)
+            .ToArray();
+        return doubles.Length == 0 ? string.Empty : Math.Round(doubles.Average(), 1).ToString();
     }
 
     private static OverviewMetricCard BuildPartsCoopMetricCard(List<Dictionary<string, object?>> rows)
