@@ -388,7 +388,11 @@ public sealed class DvtDbService
         // Total row — sum each type column across all series
         var totals = typeSales.Select(type =>
             rows.Where(r => Str(r, typeSaleKey) == type)
-                .Sum(r => { double.TryParse(Str(r, "units"), out var v); return v; })
+                .Sum(r =>
+                {
+                    double.TryParse(Str(r, "units"), out var v);
+                    return v;
+                })
                 .ToString("0")
         ).ToList();
         tableRows.Add(new OverviewTableRow("Total", totals));
@@ -398,7 +402,7 @@ public sealed class DvtDbService
 
     private static OverviewTableCard BuildCoopTrucksTable(List<Dictionary<string, object?>> rows)
     {
-        var columns = new[] { "Period", "Total Reward", "Used", "Remaining", "Ordered" };
+        var columns = new[] { "Period", "Earned", "Utilized", "Remaining", "Ordered" };
         var tableRows = rows.Select(r =>
         {
             var period = Str(r, "Period");
@@ -425,7 +429,8 @@ public sealed class DvtDbService
     private static OverviewTableCard BuildDemosTable(List<Dictionary<string, object?>> rows)
     {
         if (rows.Count == 0)
-            return new OverviewTableCard("Truck Demos", new[] { "Truck Series", "Earned", "Paid", "Remaining" }, Array.Empty<OverviewTableRow>());
+            return new OverviewTableCard("Truck Demos", new[] { "Truck Series", "Earned", "Paid", "Remaining" },
+                Array.Empty<OverviewTableRow>());
 
         var r = rows[0];
         var tableRows = new[]
@@ -460,6 +465,9 @@ public sealed class DvtDbService
             SingleMetricRow("Total", Str(r, "Total")),
             SingleMetricRow("Objective", Str(r, "Objective")),
             SingleMetricRow("Retail Total", Str(r, "retail_total")),
+            SingleMetricRow("FV Retail", Str(r, "fv retail")),
+            SingleMetricRow("Captive Retail", Str(r, "Captive retail")),
+            SingleMetricRow("Competitive Retail", Str(r, "Competitive retail")),
         }.Where(row => row.Values.Any(v => !string.IsNullOrEmpty(v.Value))).ToList();
         return new OverviewMetricCard("Dealer Parts Purchasing", metricRows);
     }
