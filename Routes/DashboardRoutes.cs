@@ -8,7 +8,7 @@ public static class DashboardRoutes
 {
     public static void MapDashboardRoutes(this WebApplication app)
     {
-        // GET /dashboard — shell only (nav, dropdowns, dealer summary)
+        // GET /dashboard — shell only (nav, dropdowns, filter options)
         // Called on every page load; does NOT run the heavy report SPs.
         app.MapGet("/dashboard", (
             string? view,
@@ -40,8 +40,7 @@ public static class DashboardRoutes
                     PrimaryTabs:       BuildPrimaryTabs(),
                     DashboardPages:    BuildDashboardPages(),
                     Filters:           filters,
-                    FilterOptions:     db.GetFilterOptions(),
-                    Summary:           db.GetDealerSummary(filters));
+                    FilterOptions:     db.GetFilterOptions());
 
                 return Results.Ok(shell);
             }
@@ -89,7 +88,7 @@ public static class DashboardRoutes
                     _               => db.GetOverviewData(filters)
                 };
 
-                return Results.Ok(new DashboardReportPayload(resolvedView, page));
+                return Results.Ok(new DashboardReportPayload(resolvedView, page, db.GetDealerSummary(filters)));
             }
             catch (Exception ex)
             {

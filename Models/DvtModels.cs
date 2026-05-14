@@ -53,8 +53,7 @@ public record DashboardShellData(
     IReadOnlyList<ShellNavItem> PrimaryTabs,
     IReadOnlyList<ShellNavItem> DashboardPages,
     DashboardFilters Filters,
-    DashboardFilterOptions FilterOptions,
-    DealerSummary Summary);
+    DashboardFilterOptions FilterOptions);
 
 // ── Dashboard – Overview page ────────────────────────────────────────────────
 
@@ -167,7 +166,7 @@ public record SalesDashboard(
 
 public record DashboardPayload(string View, DashboardShellData Shell, object Page);
 
-public record DashboardReportPayload(string View, object Page);
+public record DashboardReportPayload(string View, object Page, DealerSummary Summary);
 
 // ── Dashboard – PATCH request ────────────────────────────────────────────────
 
