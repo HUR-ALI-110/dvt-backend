@@ -118,6 +118,7 @@ public sealed class DvtDbService
                     row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                 results.Add(row);
             }
+
             return results;
         }
         catch (Exception ex)
@@ -256,7 +257,7 @@ public sealed class DvtDbService
         var objRows = TryExecute("sp_rpt_dcn_truck_sales_objectives", xmlParms);
         var demosRows = TryExecute("sp_rpt_dcn_Demos_overview", xmlParms);
         var partSalesRows = TryExecute("sp_rpt_dcn_partsales_overview", xmlParms);
-        var csiRows      = TryExecute("sp_rpt_dcn_csi_overview", xmlParms);
+        var csiRows = TryExecute("sp_rpt_dcn_csi_overview", xmlParms);
         var csiScoreRows = ExecuteCsiScoresSp(xmlParms);
         var partCoopRows = TryExecute("sp_rpt_dcn_parts_coop_overview", xmlParms);
         var irisRows = TryExecute("sp_rpt_dcn_iris_overview", xmlParms);
@@ -516,9 +517,9 @@ public sealed class DvtDbService
         {
             var totalSurveys = Str(csiScoreRows[0], "tot_num");
 
-            const string ct  = "Customer Treatment";
+            const string ct = "Customer Treatment";
             const string cre = "Customer Repair Expectations";
-            const string st  = "Schedule & Timing";
+            const string st = "Schedule & Timing";
             const string doc = "Documentation on Repairs & Charges";
 
             string G(string q) => CsiLookup(csiScoreRows, q, "g_avg");
@@ -526,13 +527,13 @@ public sealed class DvtDbService
 
             return new OverviewMetricCard("CSI", new[]
             {
-                SingleMetricRow("Total Surveys",     totalSurveys),
-                DualMetricRow("Customer Treatment",  G(ct),  N(ct)),
-                DualMetricRow("Repair Experience",   G(cre), N(cre)),
-                DualMetricRow("Schedule & Timing",   G(st),  N(st)),
-                DualMetricRow("Documentation",       G(doc), N(doc)),
-                DualMetricRow("Total",               CsiAvg(G(ct), G(cre), G(st), G(doc)),
-                                                     CsiAvg(N(ct), N(cre), N(st), N(doc))),
+                SingleMetricRow("Total Surveys", totalSurveys),
+                DualMetricRow("Customer Treatment", G(ct), N(ct)),
+                DualMetricRow("Repair Experience", G(cre), N(cre)),
+                DualMetricRow("Schedule & Timing", G(st), N(st)),
+                DualMetricRow("Documentation", G(doc), N(doc)),
+                DualMetricRow("Total", CsiAvg(G(ct), G(cre), G(st), G(doc)),
+                    CsiAvg(N(ct), N(cre), N(st), N(doc))),
             });
         }
 
@@ -542,12 +543,12 @@ public sealed class DvtDbService
         var r = csiRows[0];
         return new OverviewMetricCard("CSI", new[]
         {
-            SingleMetricRow("Total Surveys",     Str(r, "total_survey")),
-            DualMetricRow("Customer Treatment",  Str(r, "csi_cst_trt"),  Str(r, "csi_cst_trt_nat")),
-            DualMetricRow("Repair Experience",   Str(r, "csi_rpr_exp"),  Str(r, "csi_rpr_exp_nat")),
-            DualMetricRow("Schedule & Timing",   Str(r, "csi_sch_tim"),  Str(r, "csi_sch_tim_nat")),
-            DualMetricRow("Documentation",       Str(r, "csi_doc_chg"),  Str(r, "csi_doc_chg_nat")),
-            DualMetricRow("Total",               Str(r, "csi_overall"),  Str(r, "csi_tot_nat")),
+            SingleMetricRow("Total Surveys", Str(r, "total_survey")),
+            DualMetricRow("Customer Treatment", Str(r, "csi_cst_trt"), Str(r, "csi_cst_trt_nat")),
+            DualMetricRow("Repair Experience", Str(r, "csi_rpr_exp"), Str(r, "csi_rpr_exp_nat")),
+            DualMetricRow("Schedule & Timing", Str(r, "csi_sch_tim"), Str(r, "csi_sch_tim_nat")),
+            DualMetricRow("Documentation", Str(r, "csi_doc_chg"), Str(r, "csi_doc_chg_nat")),
+            DualMetricRow("Total", Str(r, "csi_overall"), Str(r, "csi_tot_nat")),
         });
     }
 
@@ -563,7 +564,11 @@ public sealed class DvtDbService
     private static string CsiAvg(params string[] vals)
     {
         var doubles = vals
-            .Select(v => { double.TryParse(v, out var d); return (ok: d > 0, d); })
+            .Select(v =>
+            {
+                double.TryParse(v, out var d);
+                return (ok: d > 0, d);
+            })
             .Where(x => x.ok)
             .Select(x => x.d)
             .ToArray();
@@ -577,8 +582,8 @@ public sealed class DvtDbService
         var r = rows[0];
         return new OverviewMetricCard("Service & Parts Co-Op", new[]
         {
-            SingleMetricRow("Total Reward", Str(r, "total_reward")),
-            SingleMetricRow("Reward Used", Str(r, "reward_used")),
+            SingleMetricRow("Earned", Str(r, "total_reward")),
+            SingleMetricRow("Utilized", Str(r, "reward_used")),
             SingleMetricRow("Remaining", Str(r, "reward_remaining")),
             SingleMetricRow("Ordered", Str(r, "ordered")),
         });
@@ -604,7 +609,7 @@ public sealed class DvtDbService
         new(label, new[]
         {
             new OverviewMetricValue("Dealer", dealerVal),
-            new OverviewMetricValue("National", natVal),
+            new OverviewMetricValue("National Average", natVal),
         });
 
     // ── Service-Parts page data ──────────────────────────────────────────────
