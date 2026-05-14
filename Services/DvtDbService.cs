@@ -147,6 +147,22 @@ public sealed class DvtDbService
     private static int Int(Dictionary<string, object?> row, string key) => Col<int>(row, key);
     private static DateTime? Date(Dictionary<string, object?> row, string key) => Col<DateTime?>(row, key);
 
+    // Numeric: whole numbers as int, decimals rounded to 2 dp (no trailing zeros)
+    private static string FmtNum(Dictionary<string, object?> row, string key)
+    {
+        var raw = Str(row, key);
+        if (!double.TryParse(raw, out var d)) return raw;
+        return Math.Round(d, 2).ToString("0.##");
+    }
+
+    // Percentage: SP returns 0–1 fraction → multiply by 100, round to 2 dp, append "%"
+    private static string FmtPct(Dictionary<string, object?> row, string key)
+    {
+        var raw = Str(row, key);
+        if (!double.TryParse(raw, out var d)) return raw;
+        return Math.Round(d * 100, 2).ToString("0.##") + "%";
+    }
+
     // ── Geo helper (kept for tracking routes) ───────────────────────────────
 
     public static GeoParams ResolveGeoParams(string? dealer, string? scope, string? district)
@@ -456,7 +472,7 @@ public sealed class DvtDbService
         var columns = new[] { "Series", "Sales", "Objective", "% Achieved" };
         var tableRows = rows.Select(r => new OverviewTableRow(
             Str(r, "series"),
-            new[] { Str(r, "sales"), Str(r, "objective"), Str(r, "pct_achieved") }
+            new[] { FmtNum(r, "sales"), FmtNum(r, "objective"), FmtPct(r, "pct_achieved") }
         )).ToList();
         return new OverviewTableCard("Truck Sales Objectives", columns, tableRows);
     }
