@@ -354,19 +354,42 @@ public sealed class DvtDbService
         if (rows.Count == 0)
             return new OverviewTableCard("Truck Sales", new[] { "Series" }, Array.Empty<OverviewTableRow>());
 
-        var typeSales = rows.Select(r => Str(r, "type_sale")).Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
-        var seriesList = rows.Select(r => Str(r, "series")).Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
+        // SP may return "type sale" (with space) or "type_sale" (underscore)
+        var typeSaleKey = rows[0].ContainsKey("type_sale") ? "type_sale" : "type sale";
+
+        var typeSales = rows
+            .Select(r => Str(r, typeSaleKey))
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+
+        var seriesList = rows
+            .Select(r => Str(r, "series"))
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+
         var columns = new[] { "Series" }.Concat(typeSales).ToList();
 
         var tableRows = seriesList.Select(series =>
         {
             var values = typeSales.Select(type =>
             {
-                var match = rows.FirstOrDefault(r => Str(r, "series") == series && Str(r, "type_sale") == type);
+                var match = rows.FirstOrDefault(r => Str(r, "series") == series && Str(r, typeSaleKey) == type);
                 return match != null ? Str(match, "units") : "0";
             }).ToList();
             return new OverviewTableRow(series, values);
         }).ToList();
+
+        // Total row — sum each type column across all series
+        var totals = typeSales.Select(type =>
+            rows.Where(r => Str(r, typeSaleKey) == type)
+                .Sum(r => { double.TryParse(Str(r, "units"), out var v); return v; })
+                .ToString("0")
+        ).ToList();
+        tableRows.Add(new OverviewTableRow("Total", totals));
 
         return new OverviewTableCard("Truck Sales", columns, tableRows);
     }
