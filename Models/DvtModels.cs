@@ -167,6 +167,8 @@ public record SalesDashboard(
 
 public record DashboardPayload(string View, DashboardShellData Shell, object Page);
 
+public record DashboardReportPayload(string View, object Page);
+
 // ── Dashboard – PATCH request ────────────────────────────────────────────────
 
 public record UpdateMessageRequest(string View, string Body);
