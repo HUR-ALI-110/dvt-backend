@@ -221,6 +221,7 @@ public sealed class DvtDbService
         var vehicleRows = TryExecute("sp_rpt_dcn_vehicleinfo_overview", xmlParms);
         var coopRows = TryExecute("sp_rpt_dcn_coop_trucks", xmlParms);
         var objRows = TryExecute("sp_rpt_dcn_truck_sales_objectives", xmlParms);
+        var demosRows = TryExecute("sp_rpt_dcn_Demos_overview", xmlParms);
         var partSalesRows = TryExecute("sp_rpt_dcn_partsales_overview", xmlParms);
         var csiRows = TryExecute("sp_rpt_dcn_csi_overview", xmlParms);
         var partCoopRows = TryExecute("sp_rpt_dcn_parts_coop_overview", xmlParms);
@@ -238,8 +239,9 @@ public sealed class DvtDbService
             PerformanceTables: new[]
             {
                 BuildVehicleInfoTable(vehicleRows),
-                BuildCoopTrucksTable(coopRows),
                 BuildTruckSalesObjectivesTable(objRows),
+                BuildDemosTable(demosRows),
+                BuildCoopTrucksTable(coopRows),
             },
             MetricCards: new[]
             {
@@ -418,6 +420,31 @@ public sealed class DvtDbService
             new[] { Str(r, "sales"), Str(r, "objective"), Str(r, "pct_achieved") }
         )).ToList();
         return new OverviewTableCard("Truck Sales Objectives", columns, tableRows);
+    }
+
+    private static OverviewTableCard BuildDemosTable(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0)
+            return new OverviewTableCard("Truck Demos", new[] { "Truck Series", "Earned", "Paid", "Remaining" }, Array.Empty<OverviewTableRow>());
+
+        var r = rows[0];
+        var tableRows = new[]
+        {
+            new OverviewTableRow("N-Series", new[]
+            {
+                Str(r, "n_demo_earned"), Str(r, "n_demo_paid"), Str(r, "n_demo_rem")
+            }),
+            new OverviewTableRow("F-Series", new[]
+            {
+                Str(r, "ftr_demo_earned"), Str(r, "ftr_demo_paid"), Str(r, "ftr_demo_rem")
+            }),
+            new OverviewTableRow("Total", new[]
+            {
+                Str(r, "total_earned"), Str(r, "total_paid"), Str(r, "total_remaining")
+            }),
+        };
+
+        return new OverviewTableCard("Truck Demos", new[] { "Truck Series", "Earned", "Paid", "Remaining" }, tableRows);
     }
 
     private static OverviewMetricCard BuildPartSalesMetricCard(List<Dictionary<string, object?>> rows)
