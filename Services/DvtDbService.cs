@@ -643,14 +643,24 @@ public sealed class DvtDbService
     {
         if (rows.Count == 0)
             return new OverviewMetricCard("Service & Parts Co-Op", Array.Empty<OverviewMetricRow>());
-        var r = rows[0];
-        return new OverviewMetricCard("Service & Parts Co-Op", new[]
+
+        static string Dollar(double d) => ((long)Math.Round(d)).ToString("$#,##0");
+
+        var metricRows = rows.Select(r =>
         {
-            SingleMetricRow("Earned", Str(r, "total_reward")),
-            SingleMetricRow("Utilized", Str(r, "reward_used")),
-            SingleMetricRow("Remaining", Str(r, "reward_remaining")),
-            SingleMetricRow("Ordered", Str(r, "ordered")),
-        });
+            var period = Str(r, "Period");
+            if (string.IsNullOrEmpty(period)) period = Str(r, "year");
+            if (string.IsNullOrEmpty(period)) period = "—";
+
+            return new OverviewMetricRow(period, new[]
+            {
+                new OverviewMetricValue("Earned",    Dollar(Dbl(r, "total_reward"))),
+                new OverviewMetricValue("Utilized",  Dollar(Dbl(r, "reward_used"))),
+                new OverviewMetricValue("Remaining", Dollar(Dbl(r, "reward_remaining"))),
+            });
+        }).ToArray();
+
+        return new OverviewMetricCard("Service & Parts Co-Op", metricRows);
     }
 
     private static OverviewMetricCard BuildIrisMetricCard(List<Dictionary<string, object?>> rows)
@@ -658,11 +668,22 @@ public sealed class DvtDbService
         if (rows.Count == 0)
             return new OverviewMetricCard("IRIS Performance", Array.Empty<OverviewMetricRow>());
         var r = rows[0];
+
+        static string P(string v)
+        {
+            if (!double.TryParse(v, out var d)) return v;
+            return Math.Round(d, 1).ToString("0.#") + "%";
+        }
+
         return new OverviewMetricCard("IRIS Performance", new[]
         {
-            DualMetricRow("YTD Net Utilization", Str(r, "ytd_net_utilization"), Str(r, "National_Avg")),
-            SingleMetricRow("1st Half", Str(r, "1st_half_net_utilization")),
-            SingleMetricRow("2nd Half", Str(r, "2nd_half_net_utilization")),
+            new("", new[]
+            {
+                new OverviewMetricValue("Dealer YTD Utilization",   P(Str(r, "ytd_net_utilization"))),
+                new OverviewMetricValue("1st Half Net Utilization", P(Str(r, "1st_half_net_utilization"))),
+                new OverviewMetricValue("2nd Half Net Utilization", P(Str(r, "2nd_half_net_utilization"))),
+                new OverviewMetricValue("COM Min.",                 P(Str(r, "National_Avg"))),
+            }),
         });
     }
 
