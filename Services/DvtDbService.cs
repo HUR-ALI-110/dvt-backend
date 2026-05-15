@@ -552,15 +552,17 @@ public sealed class DvtDbService
         List<Dictionary<string, object?>> csiRows,
         List<Dictionary<string, object?>> csiScoreRows)
     {
+        static string P(string v) => string.IsNullOrEmpty(v) ? v : v + "%";
+
         // Use sp_rpt_csi_summary data when available — matches client RDL exactly.
         // Dealer = g_avg, National = n_avg, looked up by question_text.
         if (csiScoreRows.Count > 0)
         {
             var totalSurveys = Str(csiScoreRows[0], "tot_num");
 
-            const string ct = "Customer Treatment";
+            const string ct  = "Customer Treatment";
             const string cre = "Customer Repair Expectations";
-            const string st = "Schedule & Timing";
+            const string st  = "Schedule & Timing";
             const string doc = "Documentation on Repairs & Charges";
 
             string G(string q) => CsiLookup(csiScoreRows, q, "g_avg");
@@ -569,12 +571,22 @@ public sealed class DvtDbService
             return new OverviewMetricCard("CSI", new[]
             {
                 SingleMetricRow("Total Surveys", totalSurveys),
-                DualMetricRow("Customer Treatment", G(ct), N(ct)),
-                DualMetricRow("Repair Experience", G(cre), N(cre)),
-                DualMetricRow("Schedule & Timing", G(st), N(st)),
-                DualMetricRow("Documentation", G(doc), N(doc)),
-                DualMetricRow("Total", CsiAvg(G(ct), G(cre), G(st), G(doc)),
-                    CsiAvg(N(ct), N(cre), N(st), N(doc))),
+                new("Dealer", new[]
+                {
+                    new OverviewMetricValue("Customer Treatment", P(G(ct))),
+                    new OverviewMetricValue("Repair Expectation", P(G(cre))),
+                    new OverviewMetricValue("Schedule & Timing",  P(G(st))),
+                    new OverviewMetricValue("Documentation",      P(G(doc))),
+                    new OverviewMetricValue("Total",              P(CsiAvg(G(ct), G(cre), G(st), G(doc)))),
+                }),
+                new("National Average", new[]
+                {
+                    new OverviewMetricValue("Customer Treatment", P(N(ct))),
+                    new OverviewMetricValue("Repair Expectation", P(N(cre))),
+                    new OverviewMetricValue("Schedule & Timing",  P(N(st))),
+                    new OverviewMetricValue("Documentation",      P(N(doc))),
+                    new OverviewMetricValue("Total",              P(CsiAvg(N(ct), N(cre), N(st), N(doc)))),
+                }),
             });
         }
 
@@ -585,11 +597,22 @@ public sealed class DvtDbService
         return new OverviewMetricCard("CSI", new[]
         {
             SingleMetricRow("Total Surveys", Str(r, "total_survey")),
-            DualMetricRow("Customer Treatment", Str(r, "csi_cst_trt"), Str(r, "csi_cst_trt_nat")),
-            DualMetricRow("Repair Experience", Str(r, "csi_rpr_exp"), Str(r, "csi_rpr_exp_nat")),
-            DualMetricRow("Schedule & Timing", Str(r, "csi_sch_tim"), Str(r, "csi_sch_tim_nat")),
-            DualMetricRow("Documentation", Str(r, "csi_doc_chg"), Str(r, "csi_doc_chg_nat")),
-            DualMetricRow("Total", Str(r, "csi_overall"), Str(r, "csi_tot_nat")),
+            new("Dealer", new[]
+            {
+                new OverviewMetricValue("Customer Treatment", P(Str(r, "csi_cst_trt"))),
+                new OverviewMetricValue("Repair Expectation", P(Str(r, "csi_rpr_exp"))),
+                new OverviewMetricValue("Schedule & Timing",  P(Str(r, "csi_sch_tim"))),
+                new OverviewMetricValue("Documentation",      P(Str(r, "csi_doc_chg"))),
+                new OverviewMetricValue("Total",              P(Str(r, "csi_overall"))),
+            }),
+            new("National Average", new[]
+            {
+                new OverviewMetricValue("Customer Treatment", P(Str(r, "csi_cst_trt_nat"))),
+                new OverviewMetricValue("Repair Expectation", P(Str(r, "csi_rpr_exp_nat"))),
+                new OverviewMetricValue("Schedule & Timing",  P(Str(r, "csi_sch_tim_nat"))),
+                new OverviewMetricValue("Documentation",      P(Str(r, "csi_doc_chg_nat"))),
+                new OverviewMetricValue("Total",              P(Str(r, "csi_tot_nat"))),
+            }),
         });
     }
 
