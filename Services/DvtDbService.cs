@@ -507,20 +507,45 @@ public sealed class DvtDbService
     {
         if (rows.Count == 0)
             return new OverviewMetricCard("Dealer Parts Purchasing", Array.Empty<OverviewMetricRow>());
+
         var r = rows[0];
-        var metricRows = new List<OverviewMetricRow>
+
+        var captiveW    = Dbl(r, "Captive");
+        var competitiveW = Dbl(r, "Competitive");
+        var fvW         = Dbl(r, "FV");
+        var totalW      = Dbl(r, "Total");
+        var objectiveW  = Dbl(r, "Objective");
+        var captiveR    = Dbl(r, "Captive retail");
+        var competitiveR = Dbl(r, "Competitive retail");
+        var fvR         = Dbl(r, "fv retail");
+        var totalR      = Dbl(r, "retail_total");
+
+        static string Dollar(double d) => ((long)Math.Round(d)).ToString("$#,##0");
+
+        static string CalcPct(double num, double den) =>
+            den == 0 ? string.Empty : Math.Round(num / den * 100, 1).ToString("0.#") + "%";
+
+        OverviewMetricRow CategoryRow(string label, double wholesale, double retail) =>
+            new(label, new[]
+            {
+                new OverviewMetricValue("Wholesale $",    Dollar(wholesale)),
+                new OverviewMetricValue("% of Wholesale", CalcPct(wholesale, totalW)),
+                new OverviewMetricValue("Retail / MSRP",  Dollar(retail)),
+                new OverviewMetricValue("% of Retail",    CalcPct(retail, totalR)),
+            });
+
+        return new OverviewMetricCard("Dealer Parts Purchasing", new[]
         {
-            SingleMetricRow("Captive", Str(r, "Captive")),
-            SingleMetricRow("Competitive", Str(r, "Competitive")),
-            SingleMetricRow("FV", Str(r, "FV")),
-            SingleMetricRow("Total", Str(r, "Total")),
-            SingleMetricRow("Objective", Str(r, "Objective")),
-            SingleMetricRow("Retail Total", Str(r, "retail_total")),
-            SingleMetricRow("FV Retail", Str(r, "fv retail")),
-            SingleMetricRow("Captive Retail", Str(r, "Captive retail")),
-            SingleMetricRow("Competitive Retail", Str(r, "Competitive retail")),
-        }.Where(row => row.Values.Any(v => !string.IsNullOrEmpty(v.Value))).ToList();
-        return new OverviewMetricCard("Dealer Parts Purchasing", metricRows);
+            CategoryRow("Captive",     captiveW,     captiveR),
+            CategoryRow("Competitive", competitiveW, competitiveR),
+            CategoryRow("Fleet Value", fvW,          fvR),
+            CategoryRow("Total",       totalW,       totalR),
+            new("Objective", new[]
+            {
+                new OverviewMetricValue("Wholesale $", Dollar(objectiveW)),
+                new OverviewMetricValue("% Achieved",  CalcPct(totalW, objectiveW)),
+            }),
+        });
     }
 
     private static OverviewMetricCard BuildCsiMetricCard(
