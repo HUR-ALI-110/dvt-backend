@@ -540,7 +540,7 @@ public sealed class DvtDbService
             CategoryRow("Competitive", competitiveW, competitiveR),
             CategoryRow("Fleet Value", fvW,          fvR),
             CategoryRow("Total",       totalW,       totalR),
-            new("Objective", new[]
+            new OverviewMetricRow("Objective", new[]
             {
                 new OverviewMetricValue("Wholesale $", Dollar(objectiveW)),
                 new OverviewMetricValue("% Achieved",  CalcPct(totalW, objectiveW)),
@@ -571,7 +571,7 @@ public sealed class DvtDbService
             return new OverviewMetricCard("CSI", new[]
             {
                 SingleMetricRow("Total Surveys", totalSurveys),
-                new("Dealer", new[]
+                new OverviewMetricRow("Dealer", new[]
                 {
                     new OverviewMetricValue("Customer Treatment", P(G(ct))),
                     new OverviewMetricValue("Repair Expectation", P(G(cre))),
@@ -579,7 +579,7 @@ public sealed class DvtDbService
                     new OverviewMetricValue("Documentation",      P(G(doc))),
                     new OverviewMetricValue("Total",              P(CsiAvg(G(ct), G(cre), G(st), G(doc)))),
                 }),
-                new("National Average", new[]
+                new OverviewMetricRow("National Average", new[]
                 {
                     new OverviewMetricValue("Customer Treatment", P(N(ct))),
                     new OverviewMetricValue("Repair Expectation", P(N(cre))),
@@ -597,7 +597,7 @@ public sealed class DvtDbService
         return new OverviewMetricCard("CSI", new[]
         {
             SingleMetricRow("Total Surveys", Str(r, "total_survey")),
-            new("Dealer", new[]
+            new OverviewMetricRow("Dealer", new[]
             {
                 new OverviewMetricValue("Customer Treatment", P(Str(r, "csi_cst_trt"))),
                 new OverviewMetricValue("Repair Expectation", P(Str(r, "csi_rpr_exp"))),
@@ -605,7 +605,7 @@ public sealed class DvtDbService
                 new OverviewMetricValue("Documentation",      P(Str(r, "csi_doc_chg"))),
                 new OverviewMetricValue("Total",              P(Str(r, "csi_overall"))),
             }),
-            new("National Average", new[]
+            new OverviewMetricRow("National Average", new[]
             {
                 new OverviewMetricValue("Customer Treatment", P(Str(r, "csi_cst_trt_nat"))),
                 new OverviewMetricValue("Repair Expectation", P(Str(r, "csi_rpr_exp_nat"))),
@@ -677,7 +677,7 @@ public sealed class DvtDbService
 
         return new OverviewMetricCard("IRIS Performance", new[]
         {
-            new("", new[]
+            new OverviewMetricRow("", new[]
             {
                 new OverviewMetricValue("Dealer YTD Utilization",   P(Str(r, "ytd_net_utilization"))),
                 new OverviewMetricValue("1st Half Net Utilization", P(Str(r, "1st_half_net_utilization"))),
