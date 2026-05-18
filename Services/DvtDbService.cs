@@ -747,25 +747,29 @@ public sealed class DvtDbService
         if (string.IsNullOrEmpty(filters.GeoValue))
             return new SalesDashboard(Array.Empty<SalesRow>(), Array.Empty<MessagePanel>());
 
-        var xmlParms       = BuildOverviewXmlParms(filters);
-        var salesTotalRows = TryExecute("sp_rpt_dcn_sales_total",      xmlParms);
-        var inventoryRows  = TryExecute("sp_rpt_dcn_inven_type_sales", xmlParms);
-        var coopTruckRows  = TryExecute("sp_rpt_dcn_coop_trucks",      xmlParms);
-        var trainingRows   = TryExecute("sp_rpt_dcn_sale_training",    xmlParms);
-        var indShrRows     = TryExecute("sp_rpt_dcn_ind_shr",          xmlParms);
-        var execMsgRows    = TryExecute("sp_rpt_dcn_exec_message",     xmlParms);
-        var locMsgRows     = TryExecute("sp_rpt_dcn_loc_message",      xmlParms);
-        var regnMsgRows    = TryExecute("sp_rpt_dcn_regn_message",     xmlParms);
+        var xmlParms          = BuildOverviewXmlParms(filters);
+        var salesTotalRows    = TryExecute("sp_rpt_dcn_sales_total",       xmlParms);
+        var inventoryRows     = TryExecute("sp_rpt_dcn_inven_type_sales",  xmlParms);
+        var vehicleInfoRows   = TryExecute("sp_rpt_dcn_vehicleinfo_Sales", xmlParms);
+        var coopTruckRows     = TryExecute("sp_rpt_dcn_coop_trucks",       xmlParms);
+        var demosRows         = TryExecute("sp_rpt_dcn_Demos_overview",    xmlParms);
+        var trainingRows      = TryExecute("sp_rpt_dcn_sale_training",     xmlParms);
+        var indShrRows        = TryExecute("sp_rpt_dcn_ind_shr",           xmlParms);
+        var execMsgRows       = TryExecute("sp_rpt_dcn_exec_message",      xmlParms);
+        var locMsgRows        = TryExecute("sp_rpt_dcn_loc_message",       xmlParms);
+        var regnMsgRows       = TryExecute("sp_rpt_dcn_regn_message",      xmlParms);
 
         return new SalesDashboard(
-            Rows:     BuildSalesChartRows(salesTotalRows, inventoryRows, coopTruckRows, trainingRows, indShrRows),
+            Rows:     BuildSalesChartRows(salesTotalRows, inventoryRows, vehicleInfoRows, coopTruckRows, demosRows, trainingRows, indShrRows),
             Messages: BuildSalesMessages(execMsgRows, locMsgRows, regnMsgRows));
     }
 
     private static IReadOnlyList<SalesRow> BuildSalesChartRows(
         List<Dictionary<string, object?>> salesTotalRows,
         List<Dictionary<string, object?>> inventoryRows,
+        List<Dictionary<string, object?>> vehicleInfoRows,
         List<Dictionary<string, object?>> coopTruckRows,
+        List<Dictionary<string, object?>> demosRows,
         List<Dictionary<string, object?>> trainingRows,
         List<Dictionary<string, object?>> indShrRows)
     {
@@ -788,49 +792,64 @@ public sealed class DvtDbService
                     .Sum(r => Int(r, "units")))
             .ToArray();
 
-        int TotalInv(Func<string, bool> seriesFilter) =>
-            inventoryRows.Where(r => seriesFilter(Str(r, "series"))).Sum(r => Int(r, "inventory"));
+        // RDL field name for inventory column is "inventroy" (SP typo); try both spellings
+        int TotalInv(Func<string, bool> seriesFilter)
+        {
+            var filtered = inventoryRows.Where(r => seriesFilter(Str(r, "series"))).ToList();
+            var v = filtered.Sum(r => Int(r, "inventroy"));
+            return v > 0 ? v : filtered.Sum(r => Int(r, "inventory"));
+        }
 
         bool IsN(string s) => s.StartsWith("N", StringComparison.OrdinalIgnoreCase);
         bool IsF(string s) => s.StartsWith("F", StringComparison.OrdinalIgnoreCase);
 
-        // N-Series Co-Op Utilization: reward_used / total_reward
+        // N-Series Co-Op Utilization: round(reward_used / total_reward * 100, 0)%
         static string CoopPct(List<Dictionary<string, object?>> rows)
         {
             var totalReward = rows.Sum(r => Dbl(r, "total_reward"));
             var rewardUsed  = rows.Sum(r => Dbl(r, "reward_used"));
-            return totalReward == 0 ? "N/A" : Math.Round(rewardUsed / totalReward * 100, 1).ToString("0.#") + "%";
+            return totalReward == 0 ? "N/A" : ((int)Math.Round(rewardUsed / totalReward * 100)) + "%";
         }
 
-        // F-Series Sales Training: Average_dealer_score is a fraction (0.5 → 50%)
+        // F-Series Sales Training: round(Average_dealer_score * 100, 0)%
         static string TrainingPct(List<Dictionary<string, object?>> rows)
         {
             if (rows.Count == 0) return "N/A";
             var score = Dbl(rows[0], "Average_dealer_score");
-            return Math.Round(score * 100, 1).ToString("0.#") + "%";
+            return ((int)Math.Round(score * 100)) + "%";
         }
 
-        // SOA Market Share: Isuzu units / total class units
+        // SOA Market Share: round(ISUZU units / total units * 100, 0)%
         static string MarketShare(List<Dictionary<string, object?>> rows)
         {
             var total = rows.Sum(r => Int(r, "units"));
             var isuzu = rows
                 .Where(r => Str(r, "make").Equals("ISUZU", StringComparison.OrdinalIgnoreCase))
                 .Sum(r => Int(r, "units"));
-            return total == 0 ? "N/A" : Math.Round((double)isuzu / total * 100, 1).ToString("0.#") + "%";
+            return total == 0 ? "N/A" : ((int)Math.Round((double)isuzu / total * 100)) + "%";
         }
+
+        // Orders: from sp_rpt_dcn_vehicleinfo_Sales (field: units)
+        var orders = vehicleInfoRows.Sum(r => Int(r, "units"));
+
+        // Demos Paid: from sp_rpt_dcn_Demos_overview (field: total_paid)
+        var demosPaid = demosRows.Count > 0 ? Int(demosRows[0], "total_paid") : 0;
 
         return new[]
         {
             new SalesRow(
                 new MiniChartCard("Total Truck Sales", labels, MonthlyUnits(_ => true), "#f8a108"),
-                new[] { new SalesMetric("Inventory", TotalInv(_ => true).ToString()) }),
+                new[]
+                {
+                    new SalesMetric("Inventory", TotalInv(_ => true).ToString()),
+                    new SalesMetric("Orders",    orders.ToString()),
+                }),
             new SalesRow(
                 new MiniChartCard("N-Series Sales", labels,
                     MonthlyUnits(s => s.Equals("N-Series", StringComparison.OrdinalIgnoreCase)), "#4b83ff"),
                 new[]
                 {
-                    new SalesMetric("Inventory",               TotalInv(IsN).ToString()),
+                    new SalesMetric("Demos Paid",              demosPaid.ToString()),
                     new SalesMetric("Sales Co-Op Utilization", CoopPct(coopTruckRows)),
                 }),
             new SalesRow(
@@ -838,9 +857,8 @@ public sealed class DvtDbService
                     MonthlyUnits(s => s.Equals("F-Series", StringComparison.OrdinalIgnoreCase)), "#ef2c30"),
                 new[]
                 {
-                    new SalesMetric("Inventory",        TotalInv(IsF).ToString()),
-                    new SalesMetric("Sales Training %", TrainingPct(trainingRows)),
-                    new SalesMetric("SOA Market Share", MarketShare(indShrRows)),
+                    new SalesMetric("SOA Market Share (III - VII)", MarketShare(indShrRows)),
+                    new SalesMetric("Sales Training",               TrainingPct(trainingRows)),
                 }),
         };
     }
