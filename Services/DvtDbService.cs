@@ -747,10 +747,140 @@ public sealed class DvtDbService
         if (string.IsNullOrEmpty(filters.GeoValue))
             return new SalesDashboard(Array.Empty<SalesRow>(), Array.Empty<MessagePanel>());
 
+        var xmlParms       = BuildOverviewXmlParms(filters);
+        var salesTotalRows = TryExecute("sp_rpt_dcn_sales_total",      xmlParms);
+        var inventoryRows  = TryExecute("sp_rpt_dcn_inven_type_sales", xmlParms);
+        var coopTruckRows  = TryExecute("sp_rpt_dcn_coop_trucks",      xmlParms);
+        var trainingRows   = TryExecute("sp_rpt_dcn_sale_training",    xmlParms);
+        var indShrRows     = TryExecute("sp_rpt_dcn_ind_shr",          xmlParms);
+        var execMsgRows    = TryExecute("sp_rpt_dcn_exec_message",     xmlParms);
+        var locMsgRows     = TryExecute("sp_rpt_dcn_loc_message",      xmlParms);
+        var regnMsgRows    = TryExecute("sp_rpt_dcn_regn_message",     xmlParms);
 
-        var xmlParms = BuildOverviewXmlParms(filters);
-        TryExecute("sp_rpt_dcn_sales_total", xmlParms);
-        return new SalesDashboard(Array.Empty<SalesRow>(), Array.Empty<MessagePanel>());
+        return new SalesDashboard(
+            Rows:     BuildSalesChartRows(salesTotalRows, inventoryRows, coopTruckRows, trainingRows, indShrRows),
+            Messages: BuildSalesMessages(execMsgRows, locMsgRows, regnMsgRows));
+    }
+
+    private static IReadOnlyList<SalesRow> BuildSalesChartRows(
+        List<Dictionary<string, object?>> salesTotalRows,
+        List<Dictionary<string, object?>> inventoryRows,
+        List<Dictionary<string, object?>> coopTruckRows,
+        List<Dictionary<string, object?>> trainingRows,
+        List<Dictionary<string, object?>> indShrRows)
+    {
+        // Unique months ordered by date_id; label comes from date_name_yy_mon
+        var months = salesTotalRows
+            .Select(r => (DateId: Int(r, "date_id"), Label: Str(r, "date_name_yy_mon")))
+            .Where(m => !string.IsNullOrEmpty(m.Label))
+            .GroupBy(m => m.DateId)
+            .Select(g => g.First())
+            .OrderBy(m => m.DateId)
+            .ToList();
+
+        var labels = months.Select(m => m.Label).ToArray();
+
+        // Sum units per month filtered by the category column ("N-Series" / "F-Series")
+        IReadOnlyList<double> MonthlyUnits(Func<string, bool> categoryFilter) =>
+            months.Select(m =>
+                (double)salesTotalRows
+                    .Where(r => Int(r, "date_id") == m.DateId && categoryFilter(Str(r, "category")))
+                    .Sum(r => Int(r, "units")))
+            .ToArray();
+
+        int TotalInv(Func<string, bool> seriesFilter) =>
+            inventoryRows.Where(r => seriesFilter(Str(r, "series"))).Sum(r => Int(r, "inventory"));
+
+        bool IsN(string s) => s.StartsWith("N", StringComparison.OrdinalIgnoreCase);
+        bool IsF(string s) => s.StartsWith("F", StringComparison.OrdinalIgnoreCase);
+
+        // N-Series Co-Op Utilization: reward_used / total_reward
+        static string CoopPct(List<Dictionary<string, object?>> rows)
+        {
+            var totalReward = rows.Sum(r => Dbl(r, "total_reward"));
+            var rewardUsed  = rows.Sum(r => Dbl(r, "reward_used"));
+            return totalReward == 0 ? "N/A" : Math.Round(rewardUsed / totalReward * 100, 1).ToString("0.#") + "%";
+        }
+
+        // F-Series Sales Training: Average_dealer_score is a fraction (0.5 → 50%)
+        static string TrainingPct(List<Dictionary<string, object?>> rows)
+        {
+            if (rows.Count == 0) return "N/A";
+            var score = Dbl(rows[0], "Average_dealer_score");
+            return Math.Round(score * 100, 1).ToString("0.#") + "%";
+        }
+
+        // SOA Market Share: Isuzu units / total class units
+        static string MarketShare(List<Dictionary<string, object?>> rows)
+        {
+            var total = rows.Sum(r => Int(r, "units"));
+            var isuzu = rows
+                .Where(r => Str(r, "make").Equals("ISUZU", StringComparison.OrdinalIgnoreCase))
+                .Sum(r => Int(r, "units"));
+            return total == 0 ? "N/A" : Math.Round((double)isuzu / total * 100, 1).ToString("0.#") + "%";
+        }
+
+        return new[]
+        {
+            new SalesRow(
+                new MiniChartCard("Total Truck Sales", labels, MonthlyUnits(_ => true), "#f8a108"),
+                new[] { new SalesMetric("Inventory", TotalInv(_ => true).ToString()) }),
+            new SalesRow(
+                new MiniChartCard("N-Series Sales", labels,
+                    MonthlyUnits(s => s.Equals("N-Series", StringComparison.OrdinalIgnoreCase)), "#4b83ff"),
+                new[]
+                {
+                    new SalesMetric("Inventory",               TotalInv(IsN).ToString()),
+                    new SalesMetric("Sales Co-Op Utilization", CoopPct(coopTruckRows)),
+                }),
+            new SalesRow(
+                new MiniChartCard("F-Series Sales", labels,
+                    MonthlyUnits(s => s.Equals("F-Series", StringComparison.OrdinalIgnoreCase)), "#ef2c30"),
+                new[]
+                {
+                    new SalesMetric("Inventory",        TotalInv(IsF).ToString()),
+                    new SalesMetric("Sales Training %", TrainingPct(trainingRows)),
+                    new SalesMetric("SOA Market Share", MarketShare(indShrRows)),
+                }),
+        };
+    }
+
+    private static IReadOnlyList<MessagePanel> BuildSalesMessages(
+        List<Dictionary<string, object?>> execMsgRows,
+        List<Dictionary<string, object?>> locMsgRows,
+        List<Dictionary<string, object?>> regnMsgRows)
+    {
+        var messages = new List<MessagePanel>();
+
+        if (execMsgRows.Count > 0)
+        {
+            var msg = Str(execMsgRows[0], "msg1");
+            if (!string.IsNullOrEmpty(msg))
+                messages.Add(new MessagePanel("exec-message", "red", "Executive Message", msg));
+        }
+
+        if (regnMsgRows.Count > 0)
+        {
+            var msg = Str(regnMsgRows[0], "msg1");
+            if (!string.IsNullOrEmpty(msg))
+                messages.Add(new MessagePanel("region-message", "blue", "Region Message", msg));
+        }
+
+        if (locMsgRows.Count > 0)
+        {
+            var row  = locMsgRows[0];
+            var body = Str(row, "msg1");
+            var id   = Str(row, "location_id");
+            messages.Add(new MessagePanel(
+                Id:          string.IsNullOrEmpty(id) ? "0" : id,
+                IconTone:    "green",
+                Title:       "DSM Comments",
+                Body:        string.IsNullOrEmpty(body) ? "No comments yet." : body,
+                ActionLabel: "Update DSM Comment",
+                Editable:    true));
+        }
+
+        return messages;
     }
 
     // ── Meetings ─────────────────────────────────────────────────────────────
