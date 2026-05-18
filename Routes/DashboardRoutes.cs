@@ -125,6 +125,17 @@ public static class DashboardRoutes
                         ActionLabel: "Update DSM Comment",
                         Editable:    true);
                 }
+                else if (view == "service-parts")
+                {
+                    db.UpdateLocationMessage(id, body.Body);
+                    updated = new MessagePanel(
+                        Id:          messageId,
+                        IconTone:    "green",
+                        Title:       "DSPM Comments",
+                        Body:        body.Body,
+                        ActionLabel: "Update DSPM Comment",
+                        Editable:    true);
+                }
                 else
                 {
                     db.UpdateMessage(id, body.Body);

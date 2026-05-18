@@ -707,18 +707,223 @@ public sealed class DvtDbService
                     Array.Empty<MixedChartSeries>(), Array.Empty<ChartLegendItem>()),
                 Array.Empty<StatTile>(), Array.Empty<StatTile>(), Array.Empty<MessagePanel>());
 
-        var xmlParms = BuildOverviewXmlParms(filters);
-        TryExecute("sp_rpt_dcn_partsales_overview", xmlParms);
+        var xmlParms      = BuildOverviewXmlParms(filters);
+        var pvoRows       = TryExecute("sp_rpt_dcn_parts_pvo",          xmlParms);
+        var fvTotalRows   = TryExecute("sp_rpt_dcn_fv_vs_total_parts",  xmlParms);
+        var irisRows      = TryExecute("sp_rpt_dcn_iris_util_parts",    xmlParms);
+        var trainingRows  = TryExecute("sp_rpt_dcn_service_training",   xmlParms);
+        var coopRows      = TryExecute("sp_rpt_dcn_service_co_op",      xmlParms);
+        var csiRows       = TryExecute("sp_rpt_dcn_csi_overview",       xmlParms);
+        var incentiveRows = TryExecuteWithRptLvl("sp_rpt_dcn_parts_incentives", xmlParms, 1);
+        var dpppRows      = TryExecuteWithRptLvl("sp_rpt_dcn_parts_dppp",       xmlParms, 1);
+        var backorderRows = TryExecute("sp_rpt_dcn_backorder_service",  xmlParms);
+        var execMsgRows   = TryExecute("sp_rpt_dcn_exec_message",       xmlParms);
+        var locMsgRows    = TryExecute("sp_rpt_dcn_loc_message",        xmlParms);
+        var regnMsgRows   = TryExecute("sp_rpt_dcn_regn_message",       xmlParms);
 
-        var emptyChart = new MixedChartCard(
-            "Parts Sales Overview",
-            Array.Empty<string>(),
-            Array.Empty<string>(),
-            Array.Empty<MixedChartSeries>(),
-            Array.Empty<ChartLegendItem>());
+        return new ServicePartsDashboard(
+            Chart:          BuildPartsChart(pvoRows),
+            PrimaryStats:   BuildServicePrimaryStats(csiRows, irisRows, trainingRows, coopRows),
+            SecondaryStats: BuildServiceSecondaryStats(dpppRows, fvTotalRows, incentiveRows, backorderRows),
+            Messages:       BuildServiceMessages(execMsgRows, locMsgRows, regnMsgRows));
+    }
 
-        return new ServicePartsDashboard(emptyChart, Array.Empty<StatTile>(), Array.Empty<StatTile>(),
-            Array.Empty<MessagePanel>());
+    // sp_rpt_dcn_parts_incentives and sp_rpt_dcn_parts_dppp require @rpt_lvl extra parameter
+    private List<Dictionary<string, object?>> TryExecuteWithRptLvl(string spName, string xmlParms, int rptLvl)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = new SqlCommand(spName, conn)
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandTimeout = 60
+            };
+            cmd.Parameters.Add("@parms", SqlDbType.Xml).Value = xmlParms;
+            cmd.Parameters.AddWithValue("@debug", "n");
+            cmd.Parameters.AddWithValue("@rpt_lvl", rptLvl);
+
+            var results = new List<Dictionary<string, object?>>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < reader.FieldCount; i++)
+                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                results.Add(row);
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "{SpName} failed", spName);
+            return new List<Dictionary<string, object?>>();
+        }
+    }
+
+    private static MixedChartCard BuildPartsChart(List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0)
+            return new MixedChartCard("Parts Sales Overview", Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<MixedChartSeries>(), Array.Empty<ChartLegendItem>());
+
+        var ordered = rows.OrderBy(r => Int(r, "date_id")).ToList();
+        var labels  = ordered.Select(r => Str(r, "year_month")).ToArray();
+
+        // SP column "total parts" has a space — dictionary is OrdinalIgnoreCase so both "total parts" and "total_parts" are tried
+        IReadOnlyList<double> Vals(string key) => ordered.Select(r => Dbl(r, key)).ToArray();
+
+        return new MixedChartCard(
+            Title:       "Parts Sales Overview",
+            Labels:      labels,
+            YAxisLabels: Array.Empty<string>(),
+            Series: new[]
+            {
+                new MixedChartSeries("Wholesale", "#4b83ff", "bar",  Vals("total parts")),
+                new MixedChartSeries("Objective", "#ef2c30", "line", Vals("Objective")),
+                new MixedChartSeries("Retail",    "#f8a108", "line", Vals("total_retail")),
+            },
+            Legend: new[]
+            {
+                new ChartLegendItem("Wholesale", "#4b83ff", "bar"),
+                new ChartLegendItem("Objective", "#ef2c30", "line"),
+                new ChartLegendItem("Retail",    "#f8a108", "line"),
+            });
+    }
+
+    private static IReadOnlyList<StatTile> BuildServicePrimaryStats(
+        List<Dictionary<string, object?>> csiRows,
+        List<Dictionary<string, object?>> irisRows,
+        List<Dictionary<string, object?>> trainingRows,
+        List<Dictionary<string, object?>> coopRows)
+    {
+        // CSI Overall: round(csi_overall, 0)%
+        var csiVal = csiRows.Count > 0
+            ? ((int)Math.Round(Dbl(csiRows[0], "csi_overall"))) + "%"
+            : "N/A";
+
+        // IRIS Utilization: round(ytd_net_utilization, 0)%
+        var irisVal = irisRows.Count > 0
+            ? ((int)Math.Round(Dbl(irisRows[0], "ytd_net_utilization"))) + "%"
+            : "N/A";
+
+        // Training (% Certified): round(pcn_dlr_cert, 0)%
+        var trainingVal = trainingRows.Count > 0
+            ? ((int)Math.Round(Dbl(trainingRows[0], "pcn_dlr_cert"))) + "%"
+            : "N/A";
+
+        // Service & Parts Co-Op: IIf(current="NO", 0, Int(reward_utilized)*100)%
+        var coopVal = "N/A";
+        if (coopRows.Count > 0)
+        {
+            var r       = coopRows[0];
+            var current = Str(r, "current").Trim();
+            coopVal = string.Equals(current, "NO", StringComparison.OrdinalIgnoreCase)
+                ? "0%"
+                : ((int)Dbl(r, "reward_utilized") * 100) + "%";
+        }
+
+        return new[]
+        {
+            new StatTile("CSI Overall",                       csiVal,      "green"),
+            new StatTile("IRIS Utilization",                  irisVal,     ""),
+            new StatTile("Training (% Certified)",            trainingVal, ""),
+            new StatTile("Service & Parts Co-Op Utilization", coopVal,     ""),
+        };
+    }
+
+    private static IReadOnlyList<StatTile> BuildServiceSecondaryStats(
+        List<Dictionary<string, object?>> dpppRows,
+        List<Dictionary<string, object?>> fvTotalRows,
+        List<Dictionary<string, object?>> incentiveRows,
+        List<Dictionary<string, object?>> backorderRows)
+    {
+        static string Dollar(double d) => ((long)Math.Round(d)).ToString("$#,##0");
+
+        // DPPP Accrual: currency no cents (NULL → "$0")
+        var dpppVal = "$0";
+        if (dpppRows.Count > 0)
+        {
+            var raw = Str(dpppRows[0], "dppp_accrual");
+            if (double.TryParse(raw, out var d)) dpppVal = Dollar(d);
+        }
+
+        // FV Parts vs Total: round(sum(fleetvalue)/sum(total_parts)*100, 1)%
+        var fvVal = "N/A";
+        if (fvTotalRows.Count > 0)
+        {
+            var sumFv    = fvTotalRows.Sum(r => Dbl(r, "fleetvalue"));
+            var sumParts = fvTotalRows.Sum(r => Dbl(r, "total_parts"));
+            fvVal = sumParts > 0
+                ? Math.Round(sumFv / sumParts * 100, 1).ToString("0.#") + "%"
+                : "N/A";
+        }
+
+        // National Programs Submissions: total_incentives raw count
+        var incentiveVal = incentiveRows.Count > 0
+            ? Str(incentiveRows[0], "total_incentives")
+            : "0";
+
+        // Back Orders Total: currency no cents (NULL → "$0")
+        var backorderVal = "$0";
+        if (backorderRows.Count > 0)
+        {
+            var raw = Str(backorderRows[0], "total_back_orders");
+            if (!string.IsNullOrEmpty(raw) && double.TryParse(raw, out var bo))
+                backorderVal = Dollar(bo);
+        }
+
+        var hasBackorders = backorderVal != "$0";
+        return new[]
+        {
+            new StatTile("DPPP Accrual",                  dpppVal,       ""),
+            new StatTile("FV Parts Sales vs Total",       fvVal,         ""),
+            new StatTile("National Programs Submissions", incentiveVal,  ""),
+            new StatTile("Back Orders Total",             backorderVal,  hasBackorders ? "red" : ""),
+        };
+    }
+
+    // Service RDL displays msg2 (not msg1) for all three message panels
+    private static IReadOnlyList<MessagePanel> BuildServiceMessages(
+        List<Dictionary<string, object?>> execMsgRows,
+        List<Dictionary<string, object?>> locMsgRows,
+        List<Dictionary<string, object?>> regnMsgRows)
+    {
+        var messages = new List<MessagePanel>();
+
+        if (execMsgRows.Count > 0)
+        {
+            var msg = Str(execMsgRows[0], "msg2");
+            if (string.IsNullOrEmpty(msg)) msg = Str(execMsgRows[0], "msg1");
+            if (!string.IsNullOrEmpty(msg))
+                messages.Add(new MessagePanel("exec-message", "red", "Executive Message", msg));
+        }
+
+        if (regnMsgRows.Count > 0)
+        {
+            var msg = Str(regnMsgRows[0], "msg2");
+            if (string.IsNullOrEmpty(msg)) msg = Str(regnMsgRows[0], "msg1");
+            if (!string.IsNullOrEmpty(msg))
+                messages.Add(new MessagePanel("region-message", "blue", "Region Message", msg));
+        }
+
+        if (locMsgRows.Count > 0)
+        {
+            var row  = locMsgRows[0];
+            var body = Str(row, "msg2");
+            if (string.IsNullOrEmpty(body)) body = Str(row, "msg1");
+            var id   = Str(row, "location_id");
+            messages.Add(new MessagePanel(
+                Id:          string.IsNullOrEmpty(id) ? "0" : id,
+                IconTone:    "green",
+                Title:       "DSPM Comments",
+                Body:        string.IsNullOrEmpty(body) ? "No comments yet." : body,
+                ActionLabel: "Update DSPM Comment",
+                Editable:    true));
+        }
+
+        return messages;
     }
 
     // ── EV Readiness page data ───────────────────────────────────────────────
