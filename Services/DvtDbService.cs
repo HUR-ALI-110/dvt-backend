@@ -728,16 +728,137 @@ public sealed class DvtDbService
         if (string.IsNullOrEmpty(filters.GeoValue))
             return new EvReadinessDashboard("EV Readiness", "0%", string.Empty, Array.Empty<EvSection>(), string.Empty);
 
+        var xmlParms   = BuildOverviewXmlParms(filters);
+        var ciRows     = TryExecute("sp_rpt_dcn_ci_overview", xmlParms);
+        var surveyRows = TryExecuteEvSurvey(xmlParms);
 
-        var xmlParms = BuildOverviewXmlParms(filters);
-        TryExecute("sp_rpt_dcn_ev_mobile_survey", xmlParms);
+        return BuildEvReadinessDashboard(ciRows, surveyRows);
+    }
+
+    // sp_rpt_dcn_ev_mobile_survey requires @rpt_level=5 and @survey_id as extra SQL params (not in XML)
+    private List<Dictionary<string, object?>> TryExecuteEvSurvey(string xmlParms)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = new SqlCommand("sp_rpt_dcn_ev_mobile_survey", conn)
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandTimeout = 60
+            };
+            cmd.Parameters.Add("@parms", SqlDbType.Xml).Value = xmlParms;
+            cmd.Parameters.AddWithValue("@debug", "n");
+            cmd.Parameters.AddWithValue("@rpt_level", 5);
+            cmd.Parameters.Add("@survey_id", SqlDbType.Int).Value = DBNull.Value;
+
+            var results = new List<Dictionary<string, object?>>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < reader.FieldCount; i++)
+                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                results.Add(row);
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "sp_rpt_dcn_ev_mobile_survey failed");
+            return new List<Dictionary<string, object?>>();
+        }
+    }
+
+    private static EvReadinessDashboard BuildEvReadinessDashboard(
+        List<Dictionary<string, object?>> ciRows,
+        List<Dictionary<string, object?>> surveyRows)
+    {
+        if (surveyRows.Count == 0)
+            return new EvReadinessDashboard("EV Readiness", "0%", string.Empty, Array.Empty<EvSection>(), string.Empty);
+
+        var r = surveyRows[0];
+
+        var evCert  = Str(r, "ev_cert");
+        var whslPct = Str(r, "whsl_pct");
+        var nnnPct  = Str(r, "nnn_pct");
+
+        // RDL renders ev_cert as CStr(value) & "%" — the SP already returns an integer
+        var progressValue = $"EV Certified: {(string.IsNullOrEmpty(evCert) ? "0" : evCert)}%";
+
+        // interest: binary 0/1 → state "idle"/"complete"
+        var interest      = Int(r, "interest");
+        var interestState = interest > 0 ? "complete" : "idle";
+
+        // isuzu_connect SWITCH: both=0 → 0%, registered=1 → 50%, active=1 → 100%
+        var isuzuConnect    = Int(r, "isuzu_connect");
+        var isuzuRegistered = Int(r, "isuzu_connect_registered");
+        var isuzuCompletion = (isuzuConnect == 0 && isuzuRegistered == 0) ? 0.0
+                            : isuzuRegistered == 1 ? 50.0
+                            : 100.0;
+        var isuzuSubtitle   = (isuzuConnect == 0 && isuzuRegistered == 0) ? "Not Using Isuzu Connect"
+                            : isuzuRegistered == 1 ? "Registered for Isuzu Connect"
+                            : "Using Isuzu Connect";
+        var isuzuState      = isuzuCompletion >= 100 ? "complete" : isuzuCompletion > 0 ? "active" : "idle";
+
+        static EvCard TrainingCard(string title, string subtitle, double raw)
+        {
+            var pct   = Math.Round(raw);
+            var state = pct >= 100 ? "complete" : pct > 0 ? "active" : "idle";
+            return new EvCard(title, subtitle, pct, state, "training");
+        }
+
+        var step1Cards = new EvCard[]
+        {
+            new("Becoming EV Certified",
+                "Dealer has expressed interest in EV certification",
+                interest > 0 ? 100.0 : 0.0, interestState, "ribbon"),
+            new("Isuzu Connect Status",
+                isuzuSubtitle,
+                isuzuCompletion, isuzuState, "plug"),
+            TrainingCard("High Voltage Vehicle Awareness Training",
+                "Required safety training for high-voltage vehicle handling",
+                Dbl(r, "hv_handle_safety")),
+            TrainingCard("High Voltage Vehicle Awareness Service Technician Training",
+                "HV awareness training for service technicians",
+                Dbl(r, "lvl_1_2_techs_training")),
+            TrainingCard("High Voltage Vehicle Awareness Svc Mgr/Svc Adv & Part Mgr/Part Cntr Training",
+                "HV awareness training for service & parts management",
+                Dbl(r, "svc_parts_training")),
+            TrainingCard("EV Special Service Tools & High Voltage PPE",
+                "Required EV special service tools and high-voltage PPE",
+                Dbl(r, "tools_equip_ppe")),
+        };
+
+        var step2Cards = new EvCard[]
+        {
+            TrainingCard("High Voltage Vehicle Awareness Sales Training",
+                "HV vehicle awareness training for the sales team",
+                Dbl(r, "sales_training")),
+            TrainingCard("Instructor-led & Computer-based Service Technician Training",
+                "Advanced instructor-led EV training for service technicians",
+                Dbl(r, "tech_training")),
+            TrainingCard("Instructor-led & Computer-based Svc Mgr/Svc Adv Training",
+                "EV training for service managers and advisors",
+                Dbl(r, "service_training")),
+            TrainingCard("Instructor-led & Computer-based Part Mgr/Part Cntr Training",
+                "EV training for parts managers and counter staff",
+                Dbl(r, "parts_training")),
+            TrainingCard("Dedicated EV Charger",
+                "Dedicated EV charging equipment installed at dealership",
+                Dbl(r, "charge_equip")),
+        };
 
         return new EvReadinessDashboard(
-            ProgressLabel: "EV Readiness",
-            ProgressValue: "0%",
-            ProgressHelp: string.Empty,
-            Sections: Array.Empty<EvSection>(),
-            FooterAlert: string.Empty);
+            ProgressLabel:  "Overall EV Certification Progress",
+            ProgressValue:  progressValue,
+            ProgressHelp:   "EV Certification requires completion of both wholesale and retail requirements.",
+            Sections: new[]
+            {
+                new EvSection($"Step 1: Wholesale Requirements", $"{(string.IsNullOrEmpty(whslPct) ? "0" : whslPct)}%", step1Cards),
+                new EvSection($"Step 2: Retail Requirements",    $"{(string.IsNullOrEmpty(nnnPct)  ? "0" : nnnPct)}%",  step2Cards),
+            },
+            FooterAlert: "Complete all steps to achieve EV certification. Contact your District Manager for assistance.");
     }
 
     // ── Sales page data ──────────────────────────────────────────────────────
@@ -799,9 +920,6 @@ public sealed class DvtDbService
             var v = filtered.Sum(r => Int(r, "inventroy"));
             return v > 0 ? v : filtered.Sum(r => Int(r, "inventory"));
         }
-
-        bool IsN(string s) => s.StartsWith("N", StringComparison.OrdinalIgnoreCase);
-        bool IsF(string s) => s.StartsWith("F", StringComparison.OrdinalIgnoreCase);
 
         // N-Series Co-Op Utilization: round(reward_used / total_reward * 100, 0)%
         static string CoopPct(List<Dictionary<string, object?>> rows)
@@ -1055,6 +1173,25 @@ public sealed class DvtDbService
             "dcn.sp_save_pkg_msg",
             new { pkg_id = pkgId, action_id = 0, kpi_id = 0, msg = body },
             commandType: CommandType.StoredProcedure);
+    }
+
+    public void UpdateLocationMessage(int locationId, string body)
+    {
+        // Mirror DCNRepository.SaveMessage: split on '|' into msg1/msg2, unescape <basl> → /
+        var parts = body.Split('|');
+        var msg1 = parts[0].Replace("<basl>", "/");
+        var msg2 = parts.Length > 1 ? parts[1].Replace("<basl>", "/") : string.Empty;
+        var locId = locationId.ToString();
+
+        using var conn = OpenConnection();
+        conn.Execute("sp_utl_update_data",
+            new { tbl = "dcn.location_msg", key = "location_id", value = locId, col = "msg1", data = msg1 },
+            commandType: CommandType.StoredProcedure);
+
+        if (!string.IsNullOrEmpty(msg2))
+            conn.Execute("sp_utl_update_data",
+                new { tbl = "dcn.location_msg", key = "location_id", value = locId, col = "msg2", data = msg2 },
+                commandType: CommandType.StoredProcedure);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

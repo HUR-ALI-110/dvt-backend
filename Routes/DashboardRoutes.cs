@@ -100,7 +100,7 @@ public static class DashboardRoutes
         .WithSummary("Get dashboard page data for a given view and filter set")
         .WithTags("Dashboard");
 
-        // PATCH /dashboard?messageId=930
+        // PATCH /dashboard?view=sales&messageId=3719
         app.MapMethods("/dashboard", new[] { "PATCH" }, (
             string? view,
             string? messageId,
@@ -109,23 +109,38 @@ public static class DashboardRoutes
         {
             try
             {
-                if (string.IsNullOrEmpty(messageId) || !int.TryParse(messageId, out var pkgId))
+                if (string.IsNullOrEmpty(messageId) || !int.TryParse(messageId, out var id))
                     return Results.BadRequest(new { error = "Invalid or missing messageId." });
 
-                db.UpdateMessage(pkgId, body.Body);
+                MessagePanel updated;
 
-                var updated = new MessagePanel(
-                    Id:       messageId,
-                    IconTone: "blue",
-                    Title:    "Note",
-                    Body:     body.Body,
-                    Editable: true);
+                if (view == "sales")
+                {
+                    db.UpdateLocationMessage(id, body.Body);
+                    updated = new MessagePanel(
+                        Id:          messageId,
+                        IconTone:    "green",
+                        Title:       "DSM Comments",
+                        Body:        body.Body,
+                        ActionLabel: "Update DSM Comment",
+                        Editable:    true);
+                }
+                else
+                {
+                    db.UpdateMessage(id, body.Body);
+                    updated = new MessagePanel(
+                        Id:       messageId,
+                        IconTone: "blue",
+                        Title:    "Note",
+                        Body:     body.Body,
+                        Editable: true);
+                }
 
                 return Results.Ok(new { message = updated });
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to update message for pkg {MessageId}", messageId);
+                Log.Error(ex, "Failed to update message for {View} id={MessageId}", view, messageId);
                 return Results.Problem("Failed to update message.");
             }
         })
