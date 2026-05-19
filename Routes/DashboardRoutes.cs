@@ -23,23 +23,7 @@ public static class DashboardRoutes
         {
             try
             {
-                var resolvedView = view ?? "overview";
-
-                var filters = new DashboardFilters(
-                    ReportId:    report_id    ?? "",
-                    ReportTitle: report_title ?? resolvedView,
-                    GeoTypeId:   geo_type_id  ?? "1",
-                    GeoValue:    geo_value    ?? "",
-                    GeoTitle:    geo_title    ?? "",
-                    DateTypeId:  date_type_id ?? "11",
-                    TimeTitle:   time_title   ?? "");
-
                 var shell = new DashboardShellData(
-                    BrandLabel:        "DVT",
-                    ReportButtonLabel: "Get Report",
-                    PrimaryTabs:       BuildPrimaryTabs(),
-                    DashboardPages:    BuildDashboardPages(),
-                    Filters:           filters,
                     FilterOptions:     db.GetFilterOptions());
 
                 return Results.Ok(shell);
@@ -159,21 +143,4 @@ public static class DashboardRoutes
         .WithSummary("Update a message panel body (package notes)")
         .WithTags("Dashboard");
     }
-
-    // ── Static nav config ────────────────────────────────────────────────────
-
-    private static IReadOnlyList<ShellNavItem> BuildPrimaryTabs() => new[]
-    {
-        new ShellNavItem("overview",   "Overview",   "/",           "primary"),
-        new ShellNavItem("tracking",   "Tracking",   "/tracking",   "primary"),
-        new ShellNavItem("discussion", "Discussion", "/discussion", "primary")
-    };
-
-    private static IReadOnlyList<ShellNavItem> BuildDashboardPages() => new[]
-    {
-        new ShellNavItem("overview",      "Overview",        "/",             "dashboard"),
-        new ShellNavItem("sales",         "Sales",           "/sales",        "dashboard"),
-        new ShellNavItem("service-parts", "Service & Parts", "/service-parts","dashboard"),
-        new ShellNavItem("ev-readiness",  "EV Readiness",    "/ev-readiness", "dashboard")
-    };
 }
