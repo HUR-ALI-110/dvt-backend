@@ -83,13 +83,26 @@ public record OverviewMetricRow(string Label, IReadOnlyList<OverviewMetricValue>
 
 public record OverviewMetricCard(string Title, IReadOnlyList<OverviewMetricRow> Rows);
 
+public record SalesConsultantRow(
+    string Person,
+    string CurrentLevel,
+    string Pke,
+    string TrainingWorkshop,
+    string YtdSales,
+    string YtdRetailSales,
+    string YtdFleetSales,
+    string YtdMegaSales,
+    string Rank,
+    string WaVideo);
+
 public record OverviewDashboard(
     string LeftColumnTitle,
     string CenterColumnTitle,
     string RightColumnTitle,
     IReadOnlyList<OverviewPeopleSection> PeopleSections,
     IReadOnlyList<OverviewTableCard> PerformanceTables,
-    IReadOnlyList<OverviewMetricCard> MetricCards);
+    IReadOnlyList<OverviewMetricCard> MetricCards,
+    IReadOnlyList<SalesConsultantRow> SalesConsultants);
 
 // ── Dashboard – Service-Parts page ───────────────────────────────────────────
 
