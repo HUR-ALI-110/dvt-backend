@@ -48,11 +48,6 @@ public record DashboardFilterOptions(
     IReadOnlyList<FilterOption> Dates);
 
 public record DashboardShellData(
-    string BrandLabel,
-    string ReportButtonLabel,
-    IReadOnlyList<ShellNavItem> PrimaryTabs,
-    IReadOnlyList<ShellNavItem> DashboardPages,
-    DashboardFilters Filters,
     DashboardFilterOptions FilterOptions);
 
 // ── Dashboard – Overview page ────────────────────────────────────────────────
