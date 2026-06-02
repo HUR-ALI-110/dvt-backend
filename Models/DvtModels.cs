@@ -61,14 +61,17 @@ public record PersonRow(
     string? ExtraAccentLabel = null,
     string? ExtraAccentValue = null,
     string? Accent2Label = null,
-    string? Accent2Value = null);
+    string? Accent2Value = null,
+    string? DrillType = null);
 
 public record OverviewPeopleSection(
     string Title,
     IReadOnlyList<PersonRow> Rows,
     IReadOnlyList<FooterLink>? FooterLinks = null);
 
-public record FooterLink(string Label, string Value);
+public record FooterLink(string Label, string Value, string LinkType = "ichiban");
+
+public record VerticalDetailRow(string Label, string Value);
 
 public record OverviewTableRow(string Label, IReadOnlyList<string> Values);
 
@@ -102,7 +105,12 @@ public record OverviewDashboard(
     IReadOnlyList<OverviewPeopleSection> PeopleSections,
     IReadOnlyList<OverviewTableCard> PerformanceTables,
     IReadOnlyList<OverviewMetricCard> MetricCards,
-    IReadOnlyList<SalesConsultantRow> SalesConsultants);
+    IReadOnlyList<SalesConsultantRow> SalesConsultants,
+    IReadOnlyList<VerticalDetailRow> IchibanDetail,
+    IReadOnlyList<VerticalDetailRow> CoeDetail,
+    IReadOnlyList<VerticalDetailRow> SalesManagerDetail,
+    IReadOnlyList<VerticalDetailRow> ServiceManagerDetail,
+    IReadOnlyList<VerticalDetailRow> PartsManagerDetail);
 
 // ── Dashboard – Service-Parts page ───────────────────────────────────────────
 

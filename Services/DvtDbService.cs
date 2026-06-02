@@ -163,6 +163,25 @@ public sealed class DvtDbService
         return Math.Round(d * 100, 2).ToString("0.##") + "%";
     }
 
+    // Currency: rounds to whole dollars, format $#,##0
+    private static string DollarFmt(Dictionary<string, object?> row, string key)
+    {
+        var raw = Str(row, key);
+        if (!double.TryParse(raw, out var d)) return raw;
+        return ((long)Math.Round(d)).ToString("$#,##0");
+    }
+
+    // Appends " POINTS" to a string field value
+    private static string WithPoints(Dictionary<string, object?> row, string key)
+        => Str(row, key) + " POINTS";
+
+    // Date formatted as M/d/yyyy
+    private static string DateFmt(Dictionary<string, object?> row, string key)
+    {
+        var d = Date(row, key);
+        return d.HasValue ? d.Value.ToString("M/d/yyyy") : "";
+    }
+
     // ── Geo helper (kept for tracking routes) ───────────────────────────────
 
     public static GeoParams ResolveGeoParams(string? dealer, string? scope, string? district)
@@ -270,7 +289,13 @@ public sealed class DvtDbService
         var personnelRows = TryExecute("sp_rpt_dcn_personel", xmlParms);
         // @rpt_lvl=3 returns the Sales Consultant detail table (matches dcn_dashboard_sales_cnslt_overview.rdl)
         var salesConsultantRows = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 3);
+        // Manager detail rows: rpt_lvl=2 Sales Manager, 4 Service Manager, 5 Parts Manager
+        var salesMgrDetailRows    = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 2);
+        var svcMgrDetailRows      = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 4);
+        var partsMgrDetailRows    = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 5);
         var ichibanRows = TryExecute("sp_rpt_dcn_ichiban_overview", xmlParms);
+        // COE detail rows from sp_rpt_dcn_COE_Overview with rpt_lvl=2
+        var coeDetailRows = TryExecuteWithRptLvl("sp_rpt_dcn_COE_Overview", xmlParms, 2);
         var vehicleRows = TryExecute("sp_rpt_dcn_vehicleinfo_overview", xmlParms);
         var coopRows = TryExecute("sp_rpt_dcn_coop_trucks", xmlParms);
         var objRows = TryExecute("sp_rpt_dcn_truck_sales_objectives", xmlParms);
@@ -288,7 +313,7 @@ public sealed class DvtDbService
             PeopleSections: new[]
             {
                 BuildDealerPersonnelSection(personnelRows),
-                BuildWinnersCircleSection(personnelRows, ichibanRows),
+                BuildWinnersCircleSection(personnelRows, ichibanRows, coeDetailRows),
             },
             PerformanceTables: new[]
             {
@@ -304,7 +329,12 @@ public sealed class DvtDbService
                 BuildPartsCoopMetricCard(partCoopRows),
                 BuildIrisMetricCard(irisRows),
             },
-            SalesConsultants: BuildSalesConsultantsTable(salesConsultantRows));
+            SalesConsultants:     BuildSalesConsultantsTable(salesConsultantRows),
+            IchibanDetail:        BuildIchibanDetail(ichibanRows),
+            CoeDetail:            BuildCoeDetail(coeDetailRows),
+            SalesManagerDetail:   BuildSalesManagerDetail(salesMgrDetailRows),
+            ServiceManagerDetail: BuildServiceManagerDetail(svcMgrDetailRows),
+            PartsManagerDetail:   BuildPartsManagerDetail(partsMgrDetailRows));
     }
 
     // ── Overview section builders ────────────────────────────────────────────
@@ -348,7 +378,8 @@ public sealed class DvtDbService
 
     private static OverviewPeopleSection BuildWinnersCircleSection(
         List<Dictionary<string, object?>> personnelRows,
-        List<Dictionary<string, object?>> ichibanRows)
+        List<Dictionary<string, object?>> ichibanRows,
+        List<Dictionary<string, object?>> coeRows)
     {
         var personRows = personnelRows
             .Select(r => (Row: r, Category: FindPersonnelCategory(r)))
@@ -363,6 +394,14 @@ public sealed class DvtDbService
                     "svc_managers" => "Service Manager",
                     "sales_managers" => "Sales Manager",
                     var other => other
+                };
+
+                var drillType = category switch
+                {
+                    "sales_managers" => "overview/sales-manager",
+                    "svc_managers"   => "overview/service-manager",
+                    "parts_managers" => "overview/parts-manager",
+                    _ => (string?)null
                 };
 
                 var level = Str(r, "crnt_level");
@@ -390,20 +429,27 @@ public sealed class DvtDbService
                     AccentLabel: al,
                     AccentValue: av,
                     ExtraAccentLabel: el,
-                    ExtraAccentValue: ev);
+                    ExtraAccentValue: ev,
+                    DrillType: drillType);
             })
             .Where(pr => !string.IsNullOrEmpty(pr.Name))
             .ToList();
 
-        var footerLinks = ichibanRows
-            .Select(r => new FooterLink(Str(r, "location_name"), Str(r, "qualified")))
+        var ichibanLinks = ichibanRows
+            .Select(r => new FooterLink(Str(r, "location_name"), Str(r, "qualified"), "ichiban"))
             .Where(fl => !string.IsNullOrEmpty(fl.Label))
             .ToList();
+
+        var coeLinks = coeRows.Count > 0
+            ? new[] { new FooterLink("Circle of Excellence", Str(coeRows[0], "coe_flag"), "coe") }
+            : Array.Empty<FooterLink>();
+
+        var allFooterLinks = ichibanLinks.Concat(coeLinks).ToList();
 
         return new OverviewPeopleSection(
             "Winner's Circle",
             personRows,
-            footerLinks.Count > 0 ? footerLinks : null);
+            allFooterLinks.Count > 0 ? allFooterLinks : null);
     }
 
     private static IReadOnlyList<SalesConsultantRow> BuildSalesConsultantsTable(
@@ -421,6 +467,143 @@ public sealed class DvtDbService
             Rank:             Str(r, "Rank"),
             WaVideo:          Str(r, "WA Video")
         )).ToList();
+    }
+
+    // ── Detail vertical-table builders ──────────────────────────────────────
+
+    private static IReadOnlyList<VerticalDetailRow> BuildIchibanDetail(
+        List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0) return Array.Empty<VerticalDetailRow>();
+        var r = rows[0];
+        return new[]
+        {
+            new VerticalDetailRow("Dealer Code",        Str(r, "location_code")),
+            new VerticalDetailRow("Dealer Name",        Str(r, "location_name")),
+            new VerticalDetailRow("Dealer Region",      Str(r, "region")),
+            new VerticalDetailRow("Dealer District",    Str(r, "district")),
+            new VerticalDetailRow("Qualified",          Str(r, "qualified")),
+            new VerticalDetailRow("Vehicle Points",     Str(r, "vehicle_points")),
+            new VerticalDetailRow("Part Sales",         DollarFmt(r, "part_sales")),
+            new VerticalDetailRow("CSI Customer trt.",  Str(r, "csi_cust_trt")),
+            new VerticalDetailRow("CSI Customer exp.",  Str(r, "csi_cust_exp")),
+            new VerticalDetailRow("CSI sch tim",        Str(r, "csi_sch_tim")),
+            new VerticalDetailRow("CSI Doc Chg",        Str(r, "csi_doc_chg")),
+        };
+    }
+
+    private static IReadOnlyList<VerticalDetailRow> BuildCoeDetail(
+        List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0) return Array.Empty<VerticalDetailRow>();
+        var r = rows[0];
+        return new[]
+        {
+            new VerticalDetailRow("Dealer Code",          Str(r, "location_code")),
+            new VerticalDetailRow("Dealer Name",          Str(r, "location_name")),
+            new VerticalDetailRow("Retail Sales",         Str(r, "retail_sales")),
+            new VerticalDetailRow("Fleet Sales",          Str(r, "fleet_sales")),
+            new VerticalDetailRow("Net Retail Sales",     Str(r, "non_retail_sales")),
+            new VerticalDetailRow("Salesperson Training", Str(r, "salesperson_training_1")),
+            new VerticalDetailRow("Salesperson PKE",      Str(r, "salesperson_training_2")),
+            new VerticalDetailRow("Service Training",     DollarFmt(r, "service_cert")),
+            new VerticalDetailRow("Parts Training",       Str(r, "parts_cert")),
+            new VerticalDetailRow("IRIS Percent",         Str(r, "iris_perc")),
+            new VerticalDetailRow("CSI cust trt",         Str(r, "csi_cust_trt")),
+            new VerticalDetailRow("CSI cust exp",         Str(r, "csi_cust_exp")),
+            new VerticalDetailRow("CSI sch tim",          Str(r, "csi_sch_tim")),
+            new VerticalDetailRow("CSI doc chg",          Str(r, "csi_doc_chg")),
+            new VerticalDetailRow("COE Flag",             Str(r, "coe_flag")),
+            new VerticalDetailRow("COE Potential",        Str(r, "coe_potential")),
+        };
+    }
+
+    private static IReadOnlyList<VerticalDetailRow> BuildSalesManagerDetail(
+        List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0) return Array.Empty<VerticalDetailRow>();
+        var r = rows[0];
+        return new[]
+        {
+            new VerticalDetailRow("Person",                     Str(r, "Person")),
+            new VerticalDetailRow("Current Level",              Str(r, "Current_Level")),
+            new VerticalDetailRow("Rank",                       Str(r, "Rank")),
+            new VerticalDetailRow("Dealership Retail Sales",    Str(r, "Dealership_Retail_Sales")),
+            new VerticalDetailRow("Qualifies for SM Challenge", Str(r, "Qualifies_for_SM_Challenge")),
+            new VerticalDetailRow("SM Start Date",              DateFmt(r, "SM_Start_Date")),
+            new VerticalDetailRow("SM Primary Dealership",      Str(r, "SM_Primary_Dealership")),
+            new VerticalDetailRow("SM PKEs",                    Str(r, "SM_PKEs")),
+            new VerticalDetailRow("SM In Person Class",         Str(r, "SM_In_Person_Class")),
+            new VerticalDetailRow("Videos Uploaded",            Str(r, "Videos_Uploaded")),
+            new VerticalDetailRow("Trained SC",                 Str(r, "Trained_SC")),
+            new VerticalDetailRow("SC with In Person Training", Str(r, "SC_with_In_Person_Training")),
+            new VerticalDetailRow("SC with PKEs",               Str(r, "SC_with_PKEs")),
+            new VerticalDetailRow("Everconnects First Half",    Str(r, "Everconnects_First_Half")),
+            new VerticalDetailRow("Everconnects Second Half",   Str(r, "Everconnects_Second_Half")),
+        };
+    }
+
+    private static IReadOnlyList<VerticalDetailRow> BuildServiceManagerDetail(
+        List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0) return Array.Empty<VerticalDetailRow>();
+        var r = rows[0];
+        var yearTag = Int(r, "year_tag");
+        var projLabel = yearTag == 1
+            ? "Proj YE Parts Purchases > $175,000"
+            : "Proj YE Parts Purchases > $150,000";
+        return new[]
+        {
+            new VerticalDetailRow("Person",                              Str(r, "Person")),
+            new VerticalDetailRow("Parts Group",                         Str(r, "Parts_Group")),
+            new VerticalDetailRow("Objective Yearly",                    DollarFmt(r, "Objective")),
+            new VerticalDetailRow("Purchases YTD",                       DollarFmt(r, "Purchases_YTD")),
+            new VerticalDetailRow("Purchases Projected",                 DollarFmt(r, "Purchases_Projected")),
+            new VerticalDetailRow("Program Eligibility",                 Str(r, "Qualifies")),
+            new VerticalDetailRow("YTD Parts Objective Met",             Str(r, "YTD_Parts_Objective_Met")),
+            new VerticalDetailRow(projLabel,                             Str(r, "Proj_YE_Parts_Purchases_150_000")),
+            new VerticalDetailRow("Videos Uploaded",                     Str(r, "WA_Video")),
+            new VerticalDetailRow("Parts Objective",                     WithPoints(r, "Parts_Objective")),
+            new VerticalDetailRow("Service Training",                    WithPoints(r, "Service_Training")),
+            new VerticalDetailRow("Service/Parts EVERConnects 1st Half", WithPoints(r, "Service_Parts_EVERConnects_1st_Half")),
+            new VerticalDetailRow("Service/Parts EVERConnects 2nd Half", WithPoints(r, "Service_Parts_EVERConnects_2nd_Half")),
+            new VerticalDetailRow("CSI",                                 WithPoints(r, "CSI")),
+            new VerticalDetailRow("ATD Points",                          WithPoints(r, "ATD_Bonus")),
+            new VerticalDetailRow("Total",                               WithPoints(r, "Total")),
+            new VerticalDetailRow("Rank",                                Str(r, "Rank")),
+        };
+    }
+
+    private static IReadOnlyList<VerticalDetailRow> BuildPartsManagerDetail(
+        List<Dictionary<string, object?>> rows)
+    {
+        if (rows.Count == 0) return Array.Empty<VerticalDetailRow>();
+        var r = rows[0];
+        var yearTag = Int(r, "year_tag");
+        var projLabel = yearTag == 1
+            ? "Proj YE Parts Purchases > $175,000"
+            : "Proj YE Parts Purchases > $150,000";
+        return new[]
+        {
+            new VerticalDetailRow("Person",                              Str(r, "person")),
+            new VerticalDetailRow("Parts Group",                         Str(r, "Parts_Group")),
+            new VerticalDetailRow("Objective Yearly",                    DollarFmt(r, "Objective")),
+            new VerticalDetailRow("Purchases YTD",                       DollarFmt(r, "Purchases_YTD")),
+            new VerticalDetailRow("Purchases Projected",                 DollarFmt(r, "Purchases_Projected")),
+            new VerticalDetailRow("Program Eligibility",                 Str(r, "Qualifies")),
+            new VerticalDetailRow("YTD Parts Objective Met",             Str(r, "YTD_Parts_Objective_Met")),
+            new VerticalDetailRow(projLabel,                             Str(r, "Proj_YE_Parts_Purchases_150_000")),
+            new VerticalDetailRow("Video Uploaded",                      Str(r, "WA_Video")),
+            new VerticalDetailRow("Parts Objective",                     WithPoints(r, "Parts_Objective")),
+            new VerticalDetailRow("Parts Training",                      WithPoints(r, "Parts_Training")),
+            new VerticalDetailRow("Service/Parts EVERConnects 1st Half", WithPoints(r, "Service_Parts_EVERConnects_1st_Half")),
+            new VerticalDetailRow("Service/Parts EVERConnects 2nd Half", WithPoints(r, "Service_Parts_EVERConnects_2nd_Half")),
+            new VerticalDetailRow("CSI",                                 WithPoints(r, "CSI")),
+            new VerticalDetailRow("ATD Bonus",                           WithPoints(r, "ATD_Bonus")),
+            new VerticalDetailRow("Total Points",                        WithPoints(r, "Total")),
+            new VerticalDetailRow("Group Rank",                          Str(r, "Rank")),
+            new VerticalDetailRow("National Rank",                       Str(r, "National_Rank")),
+        };
     }
 
     private static OverviewTableCard BuildVehicleInfoTable(List<Dictionary<string, object?>> rows)
