@@ -281,7 +281,12 @@ public sealed class DvtDbService
                 Array.Empty<OverviewPeopleSection>(),
                 Array.Empty<OverviewTableCard>(),
                 Array.Empty<OverviewMetricCard>(),
-                Array.Empty<SalesConsultantRow>());
+                Array.Empty<SalesConsultantRow>(),
+                Array.Empty<VerticalDetailRow>(),
+                Array.Empty<VerticalDetailRow>(),
+                Array.Empty<VerticalDetailRow>(),
+                Array.Empty<VerticalDetailRow>(),
+                Array.Empty<VerticalDetailRow>());
 
         var xmlParms = BuildOverviewXmlParms(filters);
 
@@ -435,11 +440,20 @@ public sealed class DvtDbService
             .Where(pr => !string.IsNullOrEmpty(pr.Name))
             .ToList();
 
+        // Sales Consultants link row — always append at the end of the winner rows
+        var allPersonRows = personRows
+            .Append(new PersonRow(
+                Role: "Sales Consultants",
+                Name: "Click to see list",
+                DrillType: "overview/sales-consultants"))
+            .ToList();
+
         var ichibanLinks = ichibanRows
             .Select(r => new FooterLink(Str(r, "location_name"), Str(r, "qualified"), "ichiban"))
             .Where(fl => !string.IsNullOrEmpty(fl.Label))
             .ToList();
 
+        // COE footer link only appears when COE data exists
         var coeLinks = coeRows.Count > 0
             ? new[] { new FooterLink("Circle of Excellence", Str(coeRows[0], "coe_flag"), "coe") }
             : Array.Empty<FooterLink>();
@@ -448,7 +462,7 @@ public sealed class DvtDbService
 
         return new OverviewPeopleSection(
             "Winner's Circle",
-            personRows,
+            allPersonRows,
             allFooterLinks.Count > 0 ? allFooterLinks : null);
     }
 
