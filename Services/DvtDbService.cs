@@ -261,12 +261,15 @@ public sealed class DvtDbService
             return new OverviewDashboard("Personnel", "Performance", "Metrics",
                 Array.Empty<OverviewPeopleSection>(),
                 Array.Empty<OverviewTableCard>(),
-                Array.Empty<OverviewMetricCard>());
+                Array.Empty<OverviewMetricCard>(),
+                Array.Empty<SalesConsultantRow>());
 
         var xmlParms = BuildOverviewXmlParms(filters);
 
         // sp_rpt_dcn_personel drives both people sections (dealer personnel + winner's circle)
         var personnelRows = TryExecute("sp_rpt_dcn_personel", xmlParms);
+        // @rpt_lvl=3 returns the Sales Consultant detail table (matches dcn_dashboard_sales_cnslt_overview.rdl)
+        var salesConsultantRows = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 3);
         var ichibanRows = TryExecute("sp_rpt_dcn_ichiban_overview", xmlParms);
         var vehicleRows = TryExecute("sp_rpt_dcn_vehicleinfo_overview", xmlParms);
         var coopRows = TryExecute("sp_rpt_dcn_coop_trucks", xmlParms);
@@ -300,7 +303,8 @@ public sealed class DvtDbService
                 BuildCsiMetricCard(csiRows, csiScoreRows),
                 BuildPartsCoopMetricCard(partCoopRows),
                 BuildIrisMetricCard(irisRows),
-            });
+            },
+            SalesConsultants: BuildSalesConsultantsTable(salesConsultantRows));
     }
 
     // ── Overview section builders ────────────────────────────────────────────
@@ -400,6 +404,23 @@ public sealed class DvtDbService
             "Winner's Circle",
             personRows,
             footerLinks.Count > 0 ? footerLinks : null);
+    }
+
+    private static IReadOnlyList<SalesConsultantRow> BuildSalesConsultantsTable(
+        List<Dictionary<string, object?>> rows)
+    {
+        return rows.Select(r => new SalesConsultantRow(
+            Person:           Str(r, "Person"),
+            CurrentLevel:     Str(r, "Current Level"),
+            Pke:              Str(r, "PKE"),
+            TrainingWorkshop: Str(r, "Training Workshop"),
+            YtdSales:         Str(r, "YTD Sales"),
+            YtdRetailSales:   Str(r, "YTD Retail Sales"),
+            YtdFleetSales:    Str(r, "YTD Fleet Sales"),
+            YtdMegaSales:     Str(r, "YTD Mega Sales"),
+            Rank:             Str(r, "Rank"),
+            WaVideo:          Str(r, "WA Video")
+        )).ToList();
     }
 
     private static OverviewTableCard BuildVehicleInfoTable(List<Dictionary<string, object?>> rows)
