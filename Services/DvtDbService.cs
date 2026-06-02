@@ -298,7 +298,10 @@ public sealed class DvtDbService
         var salesMgrDetailRows    = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 2);
         var svcMgrDetailRows      = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 4);
         var partsMgrDetailRows    = TryExecuteWithRptLvl("sp_rpt_dcn_personel", xmlParms, 5);
+        // ichibanRows (no rpt_lvl) is used for footer links (qualified status)
         var ichibanRows = TryExecute("sp_rpt_dcn_ichiban_overview", xmlParms);
+        // ichibanDetailRows with rpt_lvl=2 returns all detail columns (matches dcn_dashboard_ichiban_detail.rdl)
+        var ichibanDetailRows = TryExecuteWithRptLvl("sp_rpt_dcn_Ichiban_Overview", xmlParms, 2);
         // COE detail rows from sp_rpt_dcn_COE_Overview with rpt_lvl=2
         var coeDetailRows = TryExecuteWithRptLvl("sp_rpt_dcn_COE_Overview", xmlParms, 2);
         var vehicleRows = TryExecute("sp_rpt_dcn_vehicleinfo_overview", xmlParms);
@@ -335,7 +338,7 @@ public sealed class DvtDbService
                 BuildIrisMetricCard(irisRows),
             },
             SalesConsultants:     BuildSalesConsultantsTable(salesConsultantRows),
-            IchibanDetail:        BuildIchibanDetail(ichibanRows),
+            IchibanDetail:        BuildIchibanDetail(ichibanDetailRows),
             CoeDetail:            BuildCoeDetail(coeDetailRows),
             SalesManagerDetail:   BuildSalesManagerDetail(salesMgrDetailRows),
             ServiceManagerDetail: BuildServiceManagerDetail(svcMgrDetailRows),
