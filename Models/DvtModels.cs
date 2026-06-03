@@ -162,6 +162,21 @@ public record EvReadinessDashboard(
     IReadOnlyList<EvSection> Sections,
     string FooterAlert);
 
+// ── Dashboard – Drill-through shared ─────────────────────────────────────────
+
+public record DrillCol(
+    [property: JsonPropertyName("key")]       string Key,
+    [property: JsonPropertyName("col_label")] string Label,
+    [property: JsonPropertyName("col_width")] string Width,
+    [property: JsonPropertyName("align")]     string Align = "left");
+
+public record DrillRow(
+    [property: JsonPropertyName("rowContent")] Dictionary<string, string> Cells);
+
+public record DrillTable(
+    [property: JsonPropertyName("cols")] IReadOnlyList<DrillCol> Cols,
+    [property: JsonPropertyName("rows")] IReadOnlyList<DrillRow> Rows);
+
 // ── Dashboard – Sales page ───────────────────────────────────────────────────
 
 public record MiniChartCard(
@@ -174,9 +189,21 @@ public record SalesMetric(string Label, string Value);
 
 public record SalesRow(MiniChartCard Chart, IReadOnlyList<SalesMetric> Metrics);
 
+public record SalesDrillThrough(
+    DrillTable TotalTruckSales,
+    DrillTable NSeries,
+    DrillTable FSeries,
+    DrillTable Inventory,
+    DrillTable Orders,
+    DrillTable DemosPaid,
+    DrillTable CoOpUtilization,
+    DrillTable SoaMarketShare,
+    DrillTable SalesTraining);
+
 public record SalesDashboard(
     IReadOnlyList<SalesRow> Rows,
-    IReadOnlyList<MessagePanel> Messages);
+    IReadOnlyList<MessagePanel> Messages,
+    SalesDrillThrough DrillThrough);
 
 // ── Dashboard – full payload ─────────────────────────────────────────────────
 

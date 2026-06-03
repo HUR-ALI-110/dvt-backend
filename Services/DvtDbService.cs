@@ -1292,23 +1292,284 @@ public sealed class DvtDbService
     public SalesDashboard GetSalesData(DashboardFilters filters)
     {
         if (string.IsNullOrEmpty(filters.GeoValue))
-            return new SalesDashboard(Array.Empty<SalesRow>(), Array.Empty<MessagePanel>());
+            return new SalesDashboard(Array.Empty<SalesRow>(), Array.Empty<MessagePanel>(), EmptySalesDrillThrough());
 
         var xmlParms          = BuildOverviewXmlParms(filters);
-        var salesTotalRows    = TryExecute("sp_rpt_dcn_sales_total",       xmlParms);
-        var inventoryRows     = TryExecute("sp_rpt_dcn_inven_type_sales",  xmlParms);
-        var vehicleInfoRows   = TryExecute("sp_rpt_dcn_vehicleinfo_Sales", xmlParms);
-        var coopTruckRows     = TryExecute("sp_rpt_dcn_coop_trucks",       xmlParms);
-        var demosRows         = TryExecute("sp_rpt_dcn_Demos_overview",    xmlParms);
-        var trainingRows      = TryExecute("sp_rpt_dcn_sale_training",     xmlParms);
-        var indShrRows        = TryExecute("sp_rpt_dcn_ind_shr",           xmlParms);
-        var execMsgRows       = TryExecute("sp_rpt_dcn_exec_message",      xmlParms);
-        var locMsgRows        = TryExecute("sp_rpt_dcn_loc_message",       xmlParms);
-        var regnMsgRows       = TryExecute("sp_rpt_dcn_regn_message",      xmlParms);
+        var salesTotalRows    = TryExecute("sp_rpt_dcn_sales_total",              xmlParms);
+        var salesSummaryRows  = TryExecute("sp_rpt_dcn_sales_total_subreport",    xmlParms);
+        var salesDetailRows   = TryExecuteWithRptLvl("sp_rpt_dcn_sales_total",    xmlParms, 2);
+        var inventoryRows     = TryExecute("sp_rpt_dcn_inven_type_sales",         xmlParms);
+        var vehicleInfoRows   = TryExecute("sp_rpt_dcn_vehicleinfo_Sales",        xmlParms);
+        var coopTruckRows     = TryExecute("sp_rpt_dcn_coop_trucks",              xmlParms);
+        var demosRows         = TryExecute("sp_rpt_dcn_Demos_overview",           xmlParms);
+        var trainingRows      = TryExecute("sp_rpt_dcn_sale_training",            xmlParms);
+        var indShrRows        = TryExecute("sp_rpt_dcn_ind_shr",                  xmlParms);
+        var execMsgRows       = TryExecute("sp_rpt_dcn_exec_message",             xmlParms);
+        var locMsgRows        = TryExecute("sp_rpt_dcn_loc_message",              xmlParms);
+        var regnMsgRows       = TryExecute("sp_rpt_dcn_regn_message",             xmlParms);
 
         return new SalesDashboard(
-            Rows:     BuildSalesChartRows(salesTotalRows, inventoryRows, vehicleInfoRows, coopTruckRows, demosRows, trainingRows, indShrRows),
-            Messages: BuildSalesMessages(execMsgRows, locMsgRows, regnMsgRows));
+            Rows:        BuildSalesChartRows(salesTotalRows, inventoryRows, vehicleInfoRows, coopTruckRows, demosRows, trainingRows, indShrRows),
+            Messages:    BuildSalesMessages(execMsgRows, locMsgRows, regnMsgRows),
+            DrillThrough: BuildSalesDrillThrough(salesSummaryRows, salesDetailRows, inventoryRows, vehicleInfoRows, demosRows, coopTruckRows, indShrRows, trainingRows));
+    }
+
+    private static SalesDrillThrough EmptySalesDrillThrough()
+    {
+        var empty = new DrillTable(Array.Empty<DrillCol>(), Array.Empty<DrillRow>());
+        return new SalesDrillThrough(empty, empty, empty, empty, empty, empty, empty, empty, empty);
+    }
+
+    private static SalesDrillThrough BuildSalesDrillThrough(
+        List<Dictionary<string, object?>> salesSummaryRows,
+        List<Dictionary<string, object?>> salesDetailRows,
+        List<Dictionary<string, object?>> inventoryRows,
+        List<Dictionary<string, object?>> vehicleInfoRows,
+        List<Dictionary<string, object?>> demosRows,
+        List<Dictionary<string, object?>> coopTruckRows,
+        List<Dictionary<string, object?>> indShrRows,
+        List<Dictionary<string, object?>> trainingRows)
+    {
+        return new SalesDrillThrough(
+            TotalTruckSales: BuildTotalTruckSalesDrillTable(salesSummaryRows),
+            NSeries:         BuildVinDetailDrillTable(salesDetailRows, "N"),
+            FSeries:         BuildVinDetailDrillTable(salesDetailRows, "F"),
+            Inventory:       BuildInventoryDrillTable(inventoryRows),
+            Orders:          BuildOrdersDrillTable(vehicleInfoRows),
+            DemosPaid:       BuildDemosPaidDrillTable(demosRows),
+            CoOpUtilization: BuildCoOpDrillTable(coopTruckRows),
+            SoaMarketShare:  BuildSoaMarketShareDrillTable(indShrRows),
+            SalesTraining:   BuildSalesTrainingDrillTable(trainingRows));
+    }
+
+    private static DrillTable BuildTotalTruckSalesDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("year",    "Year",      "10%"),
+            new DrillCol("month",   "Month",     "12%"),
+            new DrillCol("nGas",    "N-Gas",     "14%", "center"),
+            new DrillCol("nDiesel", "N-Diesel",  "14%", "center"),
+            new DrillCol("nEv",     "N-EV",      "14%", "center"),
+            new DrillCol("fSeries", "F-Series",  "14%", "center"),
+            new DrillCol("total",   "Total",     "22%", "center"),
+        };
+
+        if (rows.Count == 0)
+            return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var ordered = rows.OrderBy(r => Int(r, "date_year")).ThenBy(r => Int(r, "date_month")).ToList();
+        var dataRows = ordered.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["year"]    = Str(r, "date_year"),
+            ["month"]   = Str(r, "month_name_short"),
+            ["nGas"]    = Str(r, "N_Series_Gas"),
+            ["nDiesel"] = Str(r, "N_Series_Diesel"),
+            ["nEv"]     = Str(r, "N_Series_EV"),
+            ["fSeries"] = Str(r, "F_Series"),
+            ["total"]   = Str(r, "units"),
+        })).ToList();
+
+        // Total row
+        static int Sum(List<Dictionary<string, object?>> rs, string key) => rs.Sum(r => Int(r, key));
+        dataRows.Add(new DrillRow(new Dictionary<string, string>
+        {
+            ["year"]    = "Total",
+            ["month"]   = "",
+            ["nGas"]    = Sum(rows, "N_Series_Gas").ToString(),
+            ["nDiesel"] = Sum(rows, "N_Series_Diesel").ToString(),
+            ["nEv"]     = Sum(rows, "N_Series_EV").ToString(),
+            ["fSeries"] = Sum(rows, "F_Series").ToString(),
+            ["total"]   = Sum(rows, "units").ToString(),
+        }));
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    private static DrillTable BuildVinDetailDrillTable(List<Dictionary<string, object?>> rows, string seriesPrefix)
+    {
+        var cols = new[]
+        {
+            new DrillCol("modelYear",   "Model Year",   "9%",  "center"),
+            new DrillCol("model",       "Model",        "10%", "center"),
+            new DrillCol("occ",         "OCC",          "5%",  "center"),
+            new DrillCol("vin",         "VIN",          "19%"),
+            new DrillCol("saleDate",    "Sale Date",    "10%", "center"),
+            new DrillCol("customer",    "Customer",     "19%"),
+            new DrillCol("salesperson", "Salesperson",  "15%"),
+            new DrillCol("group",       "Group",        "9%",  "center"),
+            new DrillCol("qty",         "Qty",          "4%",  "center"),
+        };
+
+        var filtered = rows
+            .Where(r => Str(r, "series").StartsWith(seriesPrefix, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(r => Str(r, "model_year"))
+            .ThenBy(r => Date(r, "retail_sales_date"))
+            .ToList();
+
+        if (filtered.Count == 0)
+            return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var dataRows = filtered.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["modelYear"]   = Str(r, "model_year"),
+            ["model"]       = Str(r, "model"),
+            ["occ"]         = Str(r, "occ"),
+            ["vin"]         = Str(r, "vin"),
+            ["saleDate"]    = DateFmt(r, "retail_sales_date"),
+            ["customer"]    = Str(r, "cust_bussiness_name"),
+            ["salesperson"] = Str(r, "sales_person_name"),
+            ["group"]       = Str(r, "customer_group"),
+            ["qty"]         = Str(r, "quantity"),
+        })).ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    private static DrillTable BuildInventoryDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("series",    "Series",    "60%"),
+            new DrillCol("inventory", "Inventory", "40%", "right"),
+        };
+
+        var grouped = rows
+            .GroupBy(r => Str(r, "series"))
+            .Where(g => !string.IsNullOrEmpty(g.Key))
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var inv = g.Sum(r => Int(r, "inventroy"));
+                if (inv == 0) inv = g.Sum(r => Int(r, "inventory"));
+                return new DrillRow(new Dictionary<string, string>
+                {
+                    ["series"]    = g.Key,
+                    ["inventory"] = inv.ToString(),
+                });
+            }).ToList();
+
+        return new DrillTable(cols, grouped);
+    }
+
+    private static DrillTable BuildOrdersDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("type",  "Sale Type", "60%"),
+            new DrillCol("units", "Units",     "40%", "right"),
+        };
+
+        var dataRows = rows
+            .Select(r =>
+            {
+                var type = Str(r, "type_sale");
+                if (string.IsNullOrEmpty(type)) type = Str(r, "type sale");
+                return new DrillRow(new Dictionary<string, string>
+                {
+                    ["type"]  = type,
+                    ["units"] = Str(r, "units"),
+                });
+            })
+            .Where(dr => !string.IsNullOrEmpty(dr.Cells["type"]))
+            .ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    private static DrillTable BuildDemosPaidDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("series",    "Truck Series", "28%"),
+            new DrillCol("earned",    "Earned",       "24%", "right"),
+            new DrillCol("paid",      "Paid",         "24%", "right"),
+            new DrillCol("remaining", "Remaining",    "24%", "right"),
+        };
+
+        if (rows.Count == 0)
+            return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var r = rows[0];
+        var dataRows = new[]
+        {
+            new DrillRow(new Dictionary<string, string> { ["series"] = "N-Series", ["earned"] = Str(r, "n_demo_earned"), ["paid"] = Str(r, "n_demo_paid"), ["remaining"] = Str(r, "n_demo_rem") }),
+            new DrillRow(new Dictionary<string, string> { ["series"] = "F-Series", ["earned"] = Str(r, "ftr_demo_earned"), ["paid"] = Str(r, "ftr_demo_paid"), ["remaining"] = Str(r, "ftr_demo_rem") }),
+            new DrillRow(new Dictionary<string, string> { ["series"] = "Total",    ["earned"] = Str(r, "total_earned"), ["paid"] = Str(r, "total_paid"), ["remaining"] = Str(r, "total_remaining") }),
+        };
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    private static DrillTable BuildCoOpDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("period",    "Period",    "18%"),
+            new DrillCol("earned",    "Earned",    "20%", "right"),
+            new DrillCol("utilized",  "Utilized",  "20%", "right"),
+            new DrillCol("remaining", "Remaining", "20%", "right"),
+            new DrillCol("ordered",   "Ordered",   "22%", "right"),
+        };
+
+        var dataRows = rows.Select(r =>
+        {
+            var period = Str(r, "Period");
+            if (string.IsNullOrEmpty(period)) period = Str(r, "year");
+            return new DrillRow(new Dictionary<string, string>
+            {
+                ["period"]    = period,
+                ["earned"]    = Str(r, "total_reward"),
+                ["utilized"]  = Str(r, "reward_used"),
+                ["remaining"] = Str(r, "reward_remaining"),
+                ["ordered"]   = Str(r, "ordered"),
+            });
+        }).ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    private static DrillTable BuildSoaMarketShareDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("make",  "Make",  "60%"),
+            new DrillCol("units", "Units", "40%", "right"),
+        };
+
+        var grouped = rows
+            .GroupBy(r => Str(r, "make"))
+            .Where(g => !string.IsNullOrEmpty(g.Key))
+            .OrderByDescending(g => g.Sum(r => Int(r, "units")))
+            .Select(g => new DrillRow(new Dictionary<string, string>
+            {
+                ["make"]  = g.Key,
+                ["units"] = g.Sum(r => Int(r, "units")).ToString(),
+            })).ToList();
+
+        return new DrillTable(cols, grouped);
+    }
+
+    private static DrillTable BuildSalesTrainingDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("metric", "Metric", "60%"),
+            new DrillCol("score",  "Score",  "40%", "right"),
+        };
+
+        if (rows.Count == 0)
+            return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var score = Dbl(rows[0], "Average_dealer_score");
+        var pct   = ((int)Math.Round(score * 100)) + "%";
+
+        var dataRows = new[]
+        {
+            new DrillRow(new Dictionary<string, string> { ["metric"] = "Average Dealer Score", ["score"] = pct }),
+        };
+
+        return new DrillTable(cols, dataRows);
     }
 
     private static IReadOnlyList<SalesRow> BuildSalesChartRows(
