@@ -1319,7 +1319,8 @@ public sealed class DvtDbService
     private static SalesDrillThrough EmptySalesDrillThrough()
     {
         var empty = new DrillTable(Array.Empty<DrillCol>(), Array.Empty<DrillRow>());
-        return new SalesDrillThrough(empty, empty, empty,
+        return new SalesDrillThrough(
+            Array.Empty<DrillTable>(), Array.Empty<DrillTable>(), Array.Empty<DrillTable>(),
             Array.Empty<DrillTable>(), Array.Empty<DrillTable>(),
             empty, empty, empty, empty);
     }
@@ -1335,10 +1336,14 @@ public sealed class DvtDbService
         List<Dictionary<string, object?>> vehicleOrderDetailRows,
         List<Dictionary<string, object?>> trainingDetailRows)
     {
+        // Each truck-sales drill shows 2 tables: [0] monthly summary (footer total handled
+        // client-side), [1] VIN-level detail (all series for Total, prefix-filtered for N/F).
+        var summaryTable = BuildSalesSummaryDrillTable(salesSummaryRows);
+
         return new SalesDrillThrough(
-            TotalTruckSales: BuildTotalTruckSalesDrillTable(salesSummaryRows),
-            NSeries:         BuildVinDetailDrillTable(salesDetailRows, "N"),
-            FSeries:         BuildVinDetailDrillTable(salesDetailRows, "F"),
+            TotalTruckSales: new[] { summaryTable, BuildVinDetailDrillTable(salesDetailRows, "")  },
+            NSeries:         new[] { summaryTable, BuildVinDetailDrillTable(salesDetailRows, "N") },
+            FSeries:         new[] { summaryTable, BuildVinDetailDrillTable(salesDetailRows, "F") },
             Inventory:       BuildInventoryDrillTables(inventoryRows),
             Orders:          BuildOrdersDrillTables(vehicleInfoRows, vehicleOrderDetailRows),
             DemosPaid:       BuildDemosPaidDrillTable(demosRows),
@@ -1347,7 +1352,9 @@ public sealed class DvtDbService
             SalesTraining:   BuildSalesTrainingDrillTable(trainingDetailRows));
     }
 
-    private static DrillTable BuildTotalTruckSalesDrillTable(List<Dictionary<string, object?>> rows)
+    // Monthly truck-sales summary. The "Total" row is rendered as a client-side footer,
+    // so it is intentionally not appended here.
+    private static DrillTable BuildSalesSummaryDrillTable(List<Dictionary<string, object?>> rows)
     {
         var cols = new[]
         {
@@ -1374,19 +1381,6 @@ public sealed class DvtDbService
             ["fSeries"] = Str(r, "F_Series"),
             ["total"]   = Str(r, "units"),
         })).ToList();
-
-        // Total row
-        static int Sum(List<Dictionary<string, object?>> rs, string key) => rs.Sum(r => Int(r, key));
-        dataRows.Add(new DrillRow(new Dictionary<string, string>
-        {
-            ["year"]    = "Total",
-            ["month"]   = "",
-            ["nGas"]    = Sum(rows, "N_Series_Gas").ToString(),
-            ["nDiesel"] = Sum(rows, "N_Series_Diesel").ToString(),
-            ["nEv"]     = Sum(rows, "N_Series_EV").ToString(),
-            ["fSeries"] = Sum(rows, "F_Series").ToString(),
-            ["total"]   = Sum(rows, "units").ToString(),
-        }));
 
         return new DrillTable(cols, dataRows);
     }
@@ -1433,7 +1427,7 @@ public sealed class DvtDbService
 
     private static IReadOnlyList<DrillTable> BuildInventoryDrillTables(List<Dictionary<string, object?>> rows)
     {
-        // table1: series grouped summary + Total row (vertical)
+        // table1: series grouped summary (vertical). Total is a client-side footer.
         var summaryCols = new[]
         {
             new DrillCol("series",    "Series",    "60%"),
@@ -1454,13 +1448,6 @@ public sealed class DvtDbService
                     ["inventory"] = inv.ToString(),
                 });
             }).ToList();
-
-        var totalInv = rows.Sum(r => { var v = Int(r, "inventroy"); return v > 0 ? v : Int(r, "inventory"); });
-        grouped.Add(new DrillRow(new Dictionary<string, string>
-        {
-            ["series"]    = "Total",
-            ["inventory"] = totalInv.ToString(),
-        }));
         var table1 = new DrillTable(summaryCols, grouped);
 
         // table2: raw rows per (date_id, series) — horizontal zebra
@@ -1495,7 +1482,7 @@ public sealed class DvtDbService
         List<Dictionary<string, object?>> vehicleInfoRows,
         List<Dictionary<string, object?>> vehicleOrderDetailRows)
     {
-        // table1: sale-type summary + Total row (vertical)
+        // table1: sale-type summary (vertical). Total is a client-side footer.
         var summaryCols = new[]
         {
             new DrillCol("type",  "Sale Type", "60%"),
@@ -1518,15 +1505,6 @@ public sealed class DvtDbService
             })
             .Where(dr => !string.IsNullOrEmpty(dr.Cells["type"]))
             .ToList();
-
-        var totalUnits = vehicleInfoRows
-            .Where(r => !string.IsNullOrEmpty(Str(r, typeSaleKey)))
-            .Sum(r => Int(r, "units"));
-        summaryRows.Add(new DrillRow(new Dictionary<string, string>
-        {
-            ["type"]  = "Total",
-            ["units"] = totalUnits.ToString(),
-        }));
         var table1 = new DrillTable(summaryCols, summaryRows);
 
         // table2: detailed order rows (model_year, model, series, occ, …) — horizontal zebra

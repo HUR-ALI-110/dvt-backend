@@ -190,9 +190,9 @@ public record SalesMetric(string Label, string Value);
 public record SalesRow(MiniChartCard Chart, IReadOnlyList<SalesMetric> Metrics);
 
 public record SalesDrillThrough(
-    DrillTable TotalTruckSales,
-    DrillTable NSeries,
-    DrillTable FSeries,
+    IReadOnlyList<DrillTable> TotalTruckSales,
+    IReadOnlyList<DrillTable> NSeries,
+    IReadOnlyList<DrillTable> FSeries,
     IReadOnlyList<DrillTable> Inventory,
     IReadOnlyList<DrillTable> Orders,
     DrillTable DemosPaid,
