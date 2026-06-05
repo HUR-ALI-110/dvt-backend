@@ -1555,17 +1555,21 @@ public sealed class DvtDbService
     public EvReadinessDashboard GetEvReadinessData(DashboardFilters filters)
     {
         if (string.IsNullOrEmpty(filters.GeoValue))
-            return new EvReadinessDashboard("EV Readiness", "0%", string.Empty, Array.Empty<EvSection>(), string.Empty);
+            return new EvReadinessDashboard("EV Readiness", "0%", string.Empty,
+                Array.Empty<EvSection>(), string.Empty, EmptyEvDrillThrough());
 
-        var xmlParms   = BuildOverviewXmlParms(filters);
-        var ciRows     = TryExecute("sp_rpt_dcn_ci_overview", xmlParms);
-        var surveyRows = TryExecuteEvSurvey(xmlParms);
+        var xmlParms        = BuildOverviewXmlParms(filters);
+        var ciRows          = TryExecute("sp_rpt_dcn_ci_overview", xmlParms);
+        var surveyRows      = TryExecuteEvSurvey(xmlParms, 5, null);
+        // rpt_level 2 = per-personnel / per-course survey detail (drill-through tables).
+        var surveyDetailRows = TryExecuteEvSurvey(xmlParms, 2, 21);
+        var trainingIndRows  = TryExecuteEvTrainingInd(xmlParms);
 
-        return BuildEvReadinessDashboard(ciRows, surveyRows);
+        return BuildEvReadinessDashboard(ciRows, surveyRows, surveyDetailRows, trainingIndRows);
     }
 
-    // sp_rpt_dcn_ev_mobile_survey requires @rpt_level=5 and @survey_id as extra SQL params (not in XML)
-    private List<Dictionary<string, object?>> TryExecuteEvSurvey(string xmlParms)
+    // sp_rpt_dcn_ev_mobile_survey: @rpt_level + optional @survey_id as extra SQL params (not in XML)
+    private List<Dictionary<string, object?>> TryExecuteEvSurvey(string xmlParms, int rptLevel, int? surveyId)
     {
         try
         {
@@ -1577,8 +1581,8 @@ public sealed class DvtDbService
             };
             cmd.Parameters.Add("@parms", SqlDbType.Xml).Value = xmlParms;
             cmd.Parameters.AddWithValue("@debug", "n");
-            cmd.Parameters.AddWithValue("@rpt_level", 5);
-            cmd.Parameters.Add("@survey_id", SqlDbType.Int).Value = DBNull.Value;
+            cmd.Parameters.AddWithValue("@rpt_level", rptLevel);
+            cmd.Parameters.Add("@survey_id", SqlDbType.Int).Value = (object?)surveyId ?? DBNull.Value;
 
             var results = new List<Dictionary<string, object?>>();
             using var reader = cmd.ExecuteReader();
@@ -1599,12 +1603,58 @@ public sealed class DvtDbService
         }
     }
 
+    // sp_rpt_dcn_ev_training_ind: @rpt_lvl + @userid + @personnel_group_id.
+    // Fetched unfiltered (all personnel) so the frontend can filter by user_id on name click.
+    private List<Dictionary<string, object?>> TryExecuteEvTrainingInd(string xmlParms)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = new SqlCommand("sp_rpt_dcn_ev_training_ind", conn)
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandTimeout = 60
+            };
+            cmd.Parameters.Add("@parms", SqlDbType.Xml).Value = xmlParms;
+            cmd.Parameters.AddWithValue("@debug", "n");
+            cmd.Parameters.AddWithValue("@rpt_lvl", 3);
+            cmd.Parameters.Add("@userid", SqlDbType.VarChar, 50).Value = DBNull.Value;
+            cmd.Parameters.Add("@personnel_group_id", SqlDbType.Int).Value = DBNull.Value;
+
+            var results = new List<Dictionary<string, object?>>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < reader.FieldCount; i++)
+                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                results.Add(row);
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "sp_rpt_dcn_ev_training_ind failed");
+            return new List<Dictionary<string, object?>>();
+        }
+    }
+
+    private static EvDrillThrough EmptyEvDrillThrough()
+    {
+        var empty = new DrillTable(Array.Empty<DrillCol>(), Array.Empty<DrillRow>());
+        return new EvDrillThrough(empty, empty, empty, empty);
+    }
+
     private static EvReadinessDashboard BuildEvReadinessDashboard(
         List<Dictionary<string, object?>> ciRows,
-        List<Dictionary<string, object?>> surveyRows)
+        List<Dictionary<string, object?>> surveyRows,
+        List<Dictionary<string, object?>> surveyDetailRows,
+        List<Dictionary<string, object?>> trainingIndRows)
     {
         if (surveyRows.Count == 0)
-            return new EvReadinessDashboard("EV Readiness", "0%", string.Empty, Array.Empty<EvSection>(), string.Empty);
+            return new EvReadinessDashboard("EV Readiness", "0%", string.Empty,
+                Array.Empty<EvSection>(), string.Empty, EmptyEvDrillThrough());
 
         var r = surveyRows[0];
 
@@ -1648,17 +1698,20 @@ public sealed class DvtDbService
             TrainingCard("High Voltage Vehicle Awareness Training",
                 "Required safety training for high-voltage vehicle handling",
                 Dbl(r, "hv_handle_safety")),
+            // Box 4 — clickable drill-through (Service Technician course completion).
             TrainingCard("High Voltage Vehicle Awareness Service Technician Training",
                 "HV awareness training for service technicians",
-                Dbl(r, "lvl_1_2_techs_training")),
+                Dbl(r, "lvl_1_2_techs_training")) with { DrillType = "ev/step1/box4" },
+            // Box 5 — clickable drill-through (Svc/Parts management course completion).
             TrainingCard("High Voltage Vehicle Awareness Svc Mgr/Svc Adv & Part Mgr/Part Cntr Training",
                 "HV awareness training for service & parts management",
-                Dbl(r, "svc_parts_training")),
+                Dbl(r, "svc_parts_training")) with { DrillType = "ev/step1/box5" },
             TrainingCard("EV Special Service Tools & High Voltage PPE",
                 "Required EV special service tools and high-voltage PPE",
                 Dbl(r, "tools_equip_ppe")),
         };
 
+        const string instructorLed = "ev/step2/instructor-led";
         var step2Cards = new EvCard[]
         {
             TrainingCard("High Voltage Vehicle Awareness Sales Training",
@@ -1666,13 +1719,13 @@ public sealed class DvtDbService
                 Dbl(r, "sales_training")),
             TrainingCard("Instructor-led & Computer-based Service Technician Training",
                 "Advanced instructor-led EV training for service technicians",
-                Dbl(r, "tech_training")),
+                Dbl(r, "tech_training")) with { DrillType = instructorLed },
             TrainingCard("Instructor-led & Computer-based Svc Mgr/Svc Adv Training",
                 "EV training for service managers and advisors",
-                Dbl(r, "service_training")),
+                Dbl(r, "service_training")) with { DrillType = instructorLed },
             TrainingCard("Instructor-led & Computer-based Part Mgr/Part Cntr Training",
                 "EV training for parts managers and counter staff",
-                Dbl(r, "parts_training")),
+                Dbl(r, "parts_training")) with { DrillType = instructorLed },
             TrainingCard("Dedicated EV Charger",
                 "Dedicated EV charging equipment installed at dealership",
                 Dbl(r, "charge_equip")),
@@ -1687,7 +1740,134 @@ public sealed class DvtDbService
                 new EvSection($"Step 1: Wholesale Requirements", $"{(string.IsNullOrEmpty(whslPct) ? "0" : whslPct)}%", step1Cards),
                 new EvSection($"Step 2: Retail Requirements",    $"{(string.IsNullOrEmpty(nnnPct)  ? "0" : nnnPct)}%",  step2Cards),
             },
-            FooterAlert: "Complete all steps to achieve EV certification. Contact your District Manager for assistance.");
+            FooterAlert: "Complete all steps to achieve EV certification. Contact your District Manager for assistance.",
+            DrillThrough: BuildEvDrillThrough(surveyDetailRows, trainingIndRows));
+    }
+
+    // ── EV drill-through builders ────────────────────────────────────────────
+
+    private static EvDrillThrough BuildEvDrillThrough(
+        List<Dictionary<string, object?>> surveyDetailRows,
+        List<Dictionary<string, object?>> trainingIndRows)
+    {
+        // Box4 = service technicians; Box5 = service/parts management & advisors.
+        // Split the survey detail rows by role keyword (best-effort; structure is identical).
+        static bool IsTech(string role) =>
+            role.Contains("Tech", StringComparison.OrdinalIgnoreCase);
+
+        var techRows = surveyDetailRows.Where(r => IsTech(Str(r, "primary_role"))).ToList();
+        var mgmtRows = surveyDetailRows.Where(r => !IsTech(Str(r, "primary_role"))).ToList();
+
+        return new EvDrillThrough(
+            Box4:          BuildEvCourseDrillTable(techRows.Count > 0 ? techRows : surveyDetailRows),
+            Box5:          BuildEvCourseDrillTable(mgmtRows.Count > 0 ? mgmtRows : surveyDetailRows),
+            InstructorLed: BuildEvInstructorLedDrillTable(surveyDetailRows),
+            Individuals:   BuildEvIndividualsDrillTable(trainingIndRows));
+    }
+
+    // Box4 / Box5: per-personnel course completion (sp_rpt_dcn_ev_mobile_survey rpt_level 2).
+    private static DrillTable BuildEvCourseDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("personnel", "Personnel Name",  "20%"),
+            new DrillCol("goIsuzuId", "GoIsuzu ID",      "13%", "center"),
+            new DrillCol("role",      "Role",            "16%"),
+            new DrillCol("courseNo",  "Courses Number",  "12%", "center"),
+            new DrillCol("courseName","Course Name",     "21%"),
+            new DrillCol("completed", "Course Completed","10%", "center"),
+            new DrillCol("date",      "Completion Date", "8%",  "center"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var dataRows = rows.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["personnel"]  = Str(r, "personnel_name"),
+            ["goIsuzuId"]  = Str(r, "goisuzu_id"),
+            ["role"]       = Str(r, "primary_role"),
+            ["courseNo"]   = Str(r, "course_no"),
+            ["courseName"] = Str(r, "course_name"),
+            ["completed"]  = Str(r, "completion_flag"),
+            ["date"]       = Str(r, "completion_date"),
+        })).ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // Step2 instructor-led person list (sp_rpt_dcn_ev_mobile_survey rpt_level 2, one row per person).
+    // Carries userId so the frontend can open that person's individual training on click.
+    private static DrillTable BuildEvInstructorLedDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("personnel", "Personnel Name",              "30%"),
+            new DrillCol("role",      "Role",                        "24%"),
+            new DrillCol("assigned",  "Courses Assigned",            "15%", "center"),
+            new DrillCol("completed", "Course Completed",            "15%", "center"),
+            new DrillCol("percent",   "Percent of Courses Completed","16%", "center"),
+            new DrillCol("userId",    "userId",                      "0%"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        // One row per distinct personnel (survey detail repeats personnel per course).
+        var dataRows = rows
+            .GroupBy(r => Str(r, "user_id"))
+            .Select(g =>
+            {
+                var r = g.First();
+                var pct = Str(r, "pct_complete");
+                if (double.TryParse(pct, out var p)) pct = Math.Round(p).ToString("0") + "%";
+                return new DrillRow(new Dictionary<string, string>
+                {
+                    ["personnel"] = Str(r, "personnel_name"),
+                    ["role"]      = Str(r, "primary_role"),
+                    ["assigned"]  = Str(r, "course_assigned"),
+                    ["completed"] = Str(r, "course_completed"),
+                    ["percent"]   = pct,
+                    ["userId"]    = Str(r, "user_id"),
+                });
+            })
+            .ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // Individual EV training detail (sp_rpt_dcn_ev_training_ind). userId kept for client filtering.
+    private static DrillTable BuildEvIndividualsDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("name",       "Name",            "14%"),
+            new DrillCol("type",       "Learning Type",   "12%", "center"),
+            new DrillCol("courseNo",   "Course Number",   "10%", "center"),
+            new DrillCol("courseName", "Course Name",     "20%"),
+            new DrillCol("completed",  "Completed",       "9%",  "center"),
+            new DrillCol("date",       "Completion Date", "11%", "center"),
+            new DrillCol("trainDate",  "Training Date",   "11%", "center"),
+            new DrillCol("location",   "Location",        "8%",  "center"),
+            new DrillCol("trainer",    "Trainer Name",    "5%"),
+            new DrillCol("userId",     "userId",          "0%"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var dataRows = rows.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["name"]       = Str(r, "Name"),
+            ["type"]       = Str(r, "learning_type"),
+            ["courseNo"]   = Str(r, "course_no"),
+            ["courseName"] = Str(r, "course_name"),
+            ["completed"]  = Str(r, "completion_flag"),
+            ["date"]       = Str(r, "completion_date"),
+            ["trainDate"]  = Str(r, "ilt_date"),
+            ["location"]   = Str(r, "ilt_location"),
+            ["trainer"]    = Str(r, "trainer_name"),
+            ["userId"]     = Str(r, "user_id"),
+        })).ToList();
+
+        return new DrillTable(cols, dataRows);
     }
 
     // ── Sales page data ──────────────────────────────────────────────────────

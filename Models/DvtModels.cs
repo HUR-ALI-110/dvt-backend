@@ -166,19 +166,30 @@ public record EvCard(
     string Subtitle,
     double Completion,
     string State,
-    string Icon);
+    string Icon,
+    // Drill-through key; empty = not clickable.
+    [property: JsonPropertyName("drillType")] string DrillType = "");
 
 public record EvSection(
     string Title,
     string ProgressLabel,
     IReadOnlyList<EvCard> Cards);
 
+// Step1 boxes 4/5 = per-course completion tables; Step2 instructor-led = person list
+// (clicking a name opens the matching Individuals rows — nested drill).
+public record EvDrillThrough(
+    DrillTable Box4,
+    DrillTable Box5,
+    DrillTable InstructorLed,
+    DrillTable Individuals);
+
 public record EvReadinessDashboard(
     string ProgressLabel,
     string ProgressValue,
     string ProgressHelp,
     IReadOnlyList<EvSection> Sections,
-    string FooterAlert);
+    string FooterAlert,
+    EvDrillThrough DrillThrough);
 
 // ── Dashboard – Drill-through shared ─────────────────────────────────────────
 
