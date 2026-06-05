@@ -139,7 +139,25 @@ public record ServicePartsDashboard(
     MixedChartCard Chart,
     IReadOnlyList<StatTile> PrimaryStats,
     IReadOnlyList<StatTile> SecondaryStats,
-    IReadOnlyList<MessagePanel> Messages);
+    IReadOnlyList<MessagePanel> Messages,
+    ServicePartsDrillThrough DrillThrough);
+
+// Service training drill: top-level person list + per-person individual course rows.
+// Clicking a person row in the list opens the matching individual rows (nested drill).
+public record ServiceTrainingDrill(
+    [property: JsonPropertyName("list")] DrillTable List,
+    [property: JsonPropertyName("individuals")] DrillTable Individuals);
+
+public record ServicePartsDrillThrough(
+    IReadOnlyList<DrillTable> PartsPurchasing,
+    DrillTable CsiOverall,
+    DrillTable IrisNetUtilization,
+    ServiceTrainingDrill Training,
+    DrillTable CoOpUtilization,
+    DrillTable Dppp,
+    DrillTable FvPartsSales,
+    DrillTable NationalSubmissions,
+    DrillTable BackOrderTotal);
 
 // ── Dashboard – EV Readiness page ────────────────────────────────────────────
 

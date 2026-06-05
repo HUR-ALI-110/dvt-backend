@@ -930,7 +930,8 @@ public sealed class DvtDbService
             return new ServicePartsDashboard(
                 new MixedChartCard("Parts Sales Overview", Array.Empty<string>(), Array.Empty<string>(),
                     Array.Empty<MixedChartSeries>(), Array.Empty<ChartLegendItem>()),
-                Array.Empty<StatTile>(), Array.Empty<StatTile>(), Array.Empty<MessagePanel>());
+                Array.Empty<StatTile>(), Array.Empty<StatTile>(), Array.Empty<MessagePanel>(),
+                EmptyServicePartsDrillThrough());
 
         var xmlParms      = BuildOverviewXmlParms(filters);
         var pvoRows       = TryExecute("sp_rpt_dcn_parts_pvo",          xmlParms);
@@ -939,6 +940,7 @@ public sealed class DvtDbService
         var trainingRows  = TryExecute("sp_rpt_dcn_service_training",   xmlParms);
         var coopRows      = TryExecute("sp_rpt_dcn_service_co_op",      xmlParms);
         var csiRows       = TryExecute("sp_rpt_dcn_csi_overview",       xmlParms);
+        var csiScoreRows  = ExecuteCsiScoresSp(xmlParms);
         var incentiveRows = TryExecuteWithRptLvl("sp_rpt_dcn_parts_incentives", xmlParms, 1);
         var dpppRows      = TryExecuteWithRptLvl("sp_rpt_dcn_parts_dppp",       xmlParms, 1);
         var backorderRows = TryExecute("sp_rpt_dcn_backorder_service",  xmlParms);
@@ -946,11 +948,29 @@ public sealed class DvtDbService
         var locMsgRows    = TryExecute("sp_rpt_dcn_loc_message",        xmlParms);
         var regnMsgRows   = TryExecute("sp_rpt_dcn_regn_message",       xmlParms);
 
+        // Drill-through detail rows (deeper report levels)
+        var dpppDetailRows      = TryExecuteWithRptLvl("sp_rpt_dcn_parts_dppp",            xmlParms, 2);
+        var incentiveDetailRows = TryExecuteWithRptLvl("sp_rpt_dcn_parts_incentives",     xmlParms, 2);
+        var trainingListRows    = TryExecuteWithRptLvl("sp_rpt_dcn_service_training_ind", xmlParms, 2);
+        var trainingIndRows     = TryExecuteWithRptLvl("sp_rpt_dcn_service_training_ind", xmlParms, 3);
+
+        var drillThrough = new ServicePartsDrillThrough(
+            PartsPurchasing:     BuildPartsPurchasingDrillTables(pvoRows),
+            CsiOverall:          BuildCsiDrillTable(csiRows, csiScoreRows),
+            IrisNetUtilization:  BuildIrisDrillTable(irisRows),
+            Training:            BuildServiceTrainingDrill(trainingListRows, trainingIndRows),
+            CoOpUtilization:     BuildServiceCoopDrillTable(coopRows),
+            Dppp:                BuildDpppDrillTable(dpppDetailRows),
+            FvPartsSales:        BuildFvPartsSalesDrillTable(pvoRows),
+            NationalSubmissions: BuildNationalSubmissionsDrillTable(incentiveDetailRows),
+            BackOrderTotal:      BuildBackOrderDrillTable(backorderRows));
+
         return new ServicePartsDashboard(
             Chart:          BuildPartsChart(pvoRows),
             PrimaryStats:   BuildServicePrimaryStats(csiRows, irisRows, trainingRows, coopRows),
             SecondaryStats: BuildServiceSecondaryStats(dpppRows, fvTotalRows, incentiveRows, backorderRows),
-            Messages:       BuildServiceMessages(execMsgRows, locMsgRows, regnMsgRows));
+            Messages:       BuildServiceMessages(execMsgRows, locMsgRows, regnMsgRows),
+            DrillThrough:   drillThrough);
     }
 
     // sp_rpt_dcn_parts_incentives and sp_rpt_dcn_parts_dppp require @rpt_lvl extra parameter
@@ -1149,6 +1169,381 @@ public sealed class DvtDbService
         }
 
         return messages;
+    }
+
+    // ── Service-Parts drill-through builders ─────────────────────────────────
+
+    private static ServicePartsDrillThrough EmptyServicePartsDrillThrough()
+    {
+        var empty = new DrillTable(Array.Empty<DrillCol>(), Array.Empty<DrillRow>());
+        return new ServicePartsDrillThrough(
+            Array.Empty<DrillTable>(), empty, empty,
+            new ServiceTrainingDrill(empty, empty),
+            empty, empty, empty, empty, empty);
+    }
+
+    private static string DollarStr(double d) => ((long)Math.Round(d)).ToString("$#,##0");
+
+    // Parts Purchasing (chart drill): two tables — Wholesale and Retail/MSRP — by month.
+    // Mirrors dcn_dashboard_parts_whcl_detail.rdl (sp_rpt_dcn_parts_PVO).
+    private static IReadOnlyList<DrillTable> BuildPartsPurchasingDrillTables(List<Dictionary<string, object?>> rows)
+    {
+        var wholesaleCols = new[]
+        {
+            new DrillCol("year",        "Year",        "13%"),
+            new DrillCol("month",       "Month",       "14%"),
+            new DrillCol("captive",     "Captive",     "15%", "right"),
+            new DrillCol("competitive", "Competitive", "16%", "right"),
+            new DrillCol("fleetValue",  "FleetValue",  "14%", "right"),
+            new DrillCol("total",       "Total",       "14%", "right"),
+            new DrillCol("objective",   "Objective",   "14%", "right"),
+        };
+        var retailCols = new[]
+        {
+            new DrillCol("year",        "Year",        "16%"),
+            new DrillCol("month",       "Month",       "16%"),
+            new DrillCol("captive",     "Captive",     "17%", "right"),
+            new DrillCol("competitive", "Competitive", "17%", "right"),
+            new DrillCol("fleetValue",  "FleetValue",  "17%", "right"),
+            new DrillCol("total",       "Total",       "17%", "right"),
+        };
+
+        if (rows.Count == 0)
+            return new[] { new DrillTable(wholesaleCols, Array.Empty<DrillRow>()), new DrillTable(retailCols, Array.Empty<DrillRow>()) };
+
+        var ordered = rows.OrderBy(r => Int(r, "date_id")).ToList();
+
+        var wholesaleRows = ordered.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["year"]        = Str(r, "date_year"),
+            ["month"]       = Str(r, "month_name_short"),
+            ["captive"]     = DollarStr(Dbl(r, "captive_amount")),
+            ["competitive"] = DollarStr(Dbl(r, "competitive_amount") + Dbl(r, "fleetval_amount")),
+            ["fleetValue"]  = DollarStr(Dbl(r, "fleetvalue_amount")),
+            ["total"]       = DollarStr(Dbl(r, "total parts")),
+            ["objective"]   = DollarStr(Dbl(r, "Objective")),
+        })).ToList();
+
+        var retailRows = ordered.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["year"]        = Str(r, "date_year"),
+            ["month"]       = Str(r, "month_name_short"),
+            ["captive"]     = DollarStr(Dbl(r, "Captive_retail")),
+            ["competitive"] = DollarStr(Dbl(r, "Competitive_retail")),
+            ["fleetValue"]  = DollarStr(Dbl(r, "fv_retail")),
+            ["total"]       = DollarStr(Dbl(r, "total_retail")),
+        })).ToList();
+
+        return new[] { new DrillTable(wholesaleCols, wholesaleRows), new DrillTable(retailCols, retailRows) };
+    }
+
+    // CSI detail: Dealer / National Average / COE Minimum rows × CSI metric columns.
+    // Mirrors dcn_dashboard_csi_detail.rdl (sp_rpt_csi_summary lookups, COE min = 92%).
+    private static DrillTable BuildCsiDrillTable(
+        List<Dictionary<string, object?>> csiRows,
+        List<Dictionary<string, object?>> csiScoreRows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("metric", "Metric",              "26%"),
+            new DrillCol("ct",     "Customer Treatment",  "16%", "center"),
+            new DrillCol("re",     "Repair Expectation",  "16%", "center"),
+            new DrillCol("st",     "Schedule & Timing",   "15%", "center"),
+            new DrillCol("doc",    "Document",            "13%", "center"),
+            new DrillCol("total",  "Total",               "14%", "center"),
+        };
+
+        static string P(string v) => string.IsNullOrEmpty(v) ? v : v + "%";
+
+        DrillRow MakeRow(string metric, string ct, string re, string st, string doc, string total) =>
+            new(new Dictionary<string, string>
+            {
+                ["metric"] = metric, ["ct"] = P(ct), ["re"] = P(re),
+                ["st"] = P(st), ["doc"] = P(doc), ["total"] = P(total),
+            });
+
+        var dataRows = new List<DrillRow>();
+
+        if (csiScoreRows.Count > 0)
+        {
+            const string ct = "Customer Treatment", cre = "Customer Repair Expectations",
+                         st = "Schedule & Timing",  doc = "Documentation on Repairs & Charges";
+            string G(string q) => CsiLookup(csiScoreRows, q, "g_avg");
+            string N(string q) => CsiLookup(csiScoreRows, q, "n_avg");
+
+            dataRows.Add(MakeRow("Dealer", G(ct), G(cre), G(st), G(doc), CsiAvg(G(ct), G(cre), G(st), G(doc))));
+            dataRows.Add(MakeRow("National Average", N(ct), N(cre), N(st), N(doc), CsiAvg(N(ct), N(cre), N(st), N(doc))));
+        }
+        else if (csiRows.Count > 0)
+        {
+            var r = csiRows[0];
+            dataRows.Add(MakeRow("Dealer",
+                Str(r, "csi_cst_trt"), Str(r, "csi_rpr_exp"), Str(r, "csi_sch_tim"), Str(r, "csi_doc_chg"), Str(r, "csi_overall")));
+            dataRows.Add(MakeRow("National Average",
+                Str(r, "csi_cst_trt_nat"), Str(r, "csi_rpr_exp_nat"), Str(r, "csi_sch_tim_nat"), Str(r, "csi_doc_chg_nat"), Str(r, "csi_tot_nat")));
+        }
+
+        dataRows.Add(MakeRow("COE Minimum", "92.0", "92.0", "92.0", "92.0", "92.0"));
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // IRIS detail: vertical metric/value (YTD / 1st half / 2nd half net utilization).
+    private static DrillTable BuildIrisDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("metric", "Metric", "60%"),
+            new DrillCol("value",  "Value",  "40%", "right"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        static string P(string v)
+        {
+            if (!double.TryParse(v, out var d)) return v;
+            return Math.Round(d, 1).ToString("0.#") + "%";
+        }
+
+        var r = rows[0];
+        var dataRows = new[]
+        {
+            new DrillRow(new Dictionary<string, string> { ["metric"] = "Year to Date",            ["value"] = P(Str(r, "ytd_net_utilization")) }),
+            new DrillRow(new Dictionary<string, string> { ["metric"] = "First half of the year",  ["value"] = P(Str(r, "1st_half_net_utilization")) }),
+            new DrillRow(new Dictionary<string, string> { ["metric"] = "Second half of the year", ["value"] = P(Str(r, "2nd_half_net_utilization")) }),
+        };
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // Service training: person list (rpt_lvl 2) + individual course rows (rpt_lvl 3).
+    // Each list row carries userId so the frontend can filter the individuals on row click.
+    private static ServiceTrainingDrill BuildServiceTrainingDrill(
+        List<Dictionary<string, object?>> listRows,
+        List<Dictionary<string, object?>> indRows)
+    {
+        var listCols = new[]
+        {
+            new DrillCol("name",     "Name",             "30%"),
+            new DrillCol("role",     "Role",             "24%"),
+            new DrillCol("completed","Courses Completed","16%", "center"),
+            new DrillCol("total",    "Total Courses",    "15%", "center"),
+            new DrillCol("percent",  "Percent Complete", "15%", "center"),
+            new DrillCol("userId",   "userId",           "0%"),
+        };
+
+        static string Pct(Dictionary<string, object?> r)
+        {
+            var done = Dbl(r, "Courses_Completed");
+            var total = Dbl(r, "total_courses_available");
+            return total == 0 ? "0%" : Math.Round(done / total * 100).ToString("0") + "%";
+        }
+
+        var listData = listRows.Select(r =>
+        {
+            var first = Str(r, "first_name");
+            var last  = Str(r, "last_name");
+            var role  = Str(r, "primary_role") + (Str(r, "is_primary") == "0" ? "*" : "");
+            return new DrillRow(new Dictionary<string, string>
+            {
+                ["name"]      = $"{first} {last}".Trim(),
+                ["role"]      = role,
+                ["completed"] = Str(r, "Courses_Completed"),
+                ["total"]     = Str(r, "total_courses_available"),
+                ["percent"]   = Pct(r),
+                ["userId"]    = Str(r, "user_id"),
+            });
+        }).ToList();
+
+        var indCols = new[]
+        {
+            new DrillCol("course",   "Course Name",   "32%"),
+            new DrillCol("courseNo", "Course No",     "12%", "center"),
+            new DrillCol("type",     "Learning Type", "16%", "center"),
+            new DrillCol("status",   "Status",        "12%", "center"),
+            new DrillCol("date",     "Completion",    "14%", "center"),
+            new DrillCol("iltDate",  "ILT Date",      "14%", "center"),
+            new DrillCol("userId",   "userId",        "0%"),
+        };
+
+        var indData = indRows.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["course"]   = Str(r, "course_name"),
+            ["courseNo"] = Str(r, "course_no"),
+            ["type"]     = Str(r, "learning_type"),
+            ["status"]   = Str(r, "completion_flag"),
+            ["date"]     = Str(r, "completion_date"),
+            ["iltDate"]  = Str(r, "ilt_date"),
+            ["userId"]   = Str(r, "user_id"),
+        })).ToList();
+
+        return new ServiceTrainingDrill(
+            new DrillTable(listCols, listData),
+            new DrillTable(indCols, indData));
+    }
+
+    // Service & Parts Co-Op detail (sp_rpt_dcn_service_Co_Op).
+    private static DrillTable BuildServiceCoopDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("period",    "Time Period",     "25%"),
+            new DrillCol("earned",    "Total Reward",    "25%", "right"),
+            new DrillCol("used",      "Reward Used",     "25%", "right"),
+            new DrillCol("remaining", "Remaining Reward","25%", "right"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var dataRows = rows.Select(r =>
+        {
+            var period = Str(r, "part of year");
+            if (string.IsNullOrEmpty(period)) period = Str(r, "period");
+            return new DrillRow(new Dictionary<string, string>
+            {
+                ["period"]    = period,
+                ["earned"]    = DollarStr(Dbl(r, "total_reward")),
+                ["used"]      = DollarStr(Dbl(r, "reward_used")),
+                ["remaining"] = DollarStr(Dbl(r, "reward_remaining")),
+            });
+        }).ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // DPPP Accruals detail (sp_rpt_dcn_parts_dppp rpt_lvl 2).
+    private static DrillTable BuildDpppDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("periodEnd",  "Period Ending",    "13%"),
+            new DrillCol("purchases",  "Parts Purch. YTD", "14%", "right"),
+            new DrillCol("accrual",    "DPPP Accrual",     "13%", "right"),
+            new DrillCol("scrap",      "Mandatory Scrap",  "12%", "right"),
+            new DrillCol("cleanInv",   "Max Clean Inv",    "12%", "right"),
+            new DrillCol("status",     "Status",           "10%", "center"),
+            new DrillCol("creditDate", "Credit Date",      "12%", "center"),
+            new DrillCol("claim",      "Claim Amount",     "14%", "right"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var dataRows = rows.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["periodEnd"]  = Str(r, "period_end"),
+            ["purchases"]  = DollarStr(Dbl(r, "part_purchase_ytd")),
+            ["accrual"]    = DollarStr(Dbl(r, "dppp_accrual")),
+            ["scrap"]      = Str(r, "mandatory_scrap"),
+            ["cleanInv"]   = Str(r, "max_clean_inv"),
+            ["status"]     = Str(r, "status"),
+            ["creditDate"] = Str(r, "credit_date"),
+            ["claim"]      = DollarStr(Dbl(r, "claim_amount")),
+        })).ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // FV Parts Sales vs Total detail (sp_rpt_dcn_parts_PVO, monthly fleet value share).
+    private static DrillTable BuildFvPartsSalesDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("year",    "Year",                "18%"),
+            new DrillCol("month",   "Month",               "20%"),
+            new DrillCol("fv",      "Fleetvalue",          "20%", "right"),
+            new DrillCol("total",   "Total Parts",         "20%", "right"),
+            new DrillCol("percent", "Percent Total Parts", "22%", "right"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var ordered = rows.OrderBy(r => Int(r, "date_id")).ToList();
+        var dataRows = ordered.Select(r =>
+        {
+            var fv    = Dbl(r, "fleetvalue_amount");
+            var total = Dbl(r, "total parts");
+            var pct   = total == 0 ? "" : Math.Round(fv / total * 100, 1).ToString("0.#") + "%";
+            return new DrillRow(new Dictionary<string, string>
+            {
+                ["year"]    = Str(r, "date_year"),
+                ["month"]   = Str(r, "month_name_short"),
+                ["fv"]      = DollarStr(fv),
+                ["total"]   = DollarStr(total),
+                ["percent"] = pct,
+            });
+        }).ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // National Program Submissions detail (sp_rpt_dcn_parts_incentives rpt_lvl 2).
+    private static DrillTable BuildNationalSubmissionsDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("personnel",  "Personnel",         "26%"),
+            new DrillCol("period",     "Period",            "16%"),
+            new DrillCol("reference",  "Payment Reference", "22%"),
+            new DrillCol("incentives", "Total Incentives",  "18%", "right"),
+            new DrillCol("payments",   "Total Payments",    "18%", "right"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var dataRows = rows.Select(r => new DrillRow(new Dictionary<string, string>
+        {
+            ["personnel"]  = Str(r, "personnel"),
+            ["period"]     = Str(r, "period"),
+            ["reference"]  = Str(r, "payment_reference"),
+            ["incentives"] = Str(r, "total_incentives"),
+            ["payments"]   = DollarStr(Dbl(r, "total_payments")),
+        })).ToList();
+
+        return new DrillTable(cols, dataRows);
+    }
+
+    // Back Orders detail (sp_rpt_dcn_backorder_Service).
+    private static DrillTable BuildBackOrderDrillTable(List<Dictionary<string, object?>> rows)
+    {
+        var cols = new[]
+        {
+            new DrillCol("dlrCode",  "Dealer Code",   "9%",  "center"),
+            new DrillCol("ordNo",    "Order Number",  "11%", "center"),
+            new DrillCol("ordDate",  "Order Date",    "10%", "center"),
+            new DrillCol("ordRef",   "Order Ref",     "9%",  "center"),
+            new DrillCol("part",     "Order Part",    "12%"),
+            new DrillCol("fillCode", "Fill Code",     "8%",  "center"),
+            new DrillCol("qty",      "BO Qty",        "7%",  "right"),
+            new DrillCol("desc",     "Description",   "20%"),
+            new DrillCol("upgrade",  "Upgrade Flag",  "8%",  "center"),
+            new DrillCol("remarks",  "Remarks",       "6%"),
+        };
+
+        if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
+
+        var dataRows = rows.Select(r =>
+        {
+            var remarks = string.Join(" ", new[]
+            {
+                Str(r, "boremarks1"), Str(r, "boremarks2"), Str(r, "boremarks3")
+            }.Where(s => !string.IsNullOrEmpty(s)));
+
+            return new DrillRow(new Dictionary<string, string>
+            {
+                ["dlrCode"]  = Str(r, "dlrcd"),
+                ["ordNo"]    = Str(r, "dlrOrdNo"),
+                ["ordDate"]  = Str(r, "orddte"),
+                ["ordRef"]   = Str(r, "ordref"),
+                ["part"]     = Str(r, "ordpart"),
+                ["fillCode"] = Str(r, "fillcode"),
+                ["qty"]      = Str(r, "boqty"),
+                ["desc"]     = Str(r, "desc"),
+                ["upgrade"]  = Str(r, "upgradeflag"),
+                ["remarks"]  = remarks,
+            });
+        }).ToList();
+
+        return new DrillTable(cols, dataRows);
     }
 
     // ── EV Readiness page data ───────────────────────────────────────────────
