@@ -175,11 +175,15 @@ public sealed class DvtDbService
     private static string WithPoints(Dictionary<string, object?> row, string key)
         => Str(row, key) + " POINTS";
 
-    // Date formatted as M/d/yyyy
+    // Date formatted as M/d/yyyy. Handles both DateTime columns and string columns
+    // (many user-defined SP columns return dates as already-formatted strings).
     private static string DateFmt(Dictionary<string, object?> row, string key)
     {
-        var d = Date(row, key);
-        return d.HasValue ? d.Value.ToString("M/d/yyyy") : "";
+        if (!row.TryGetValue(key, out var v) || v is null) return "";
+        if (v is DateTime dt) return dt.ToString("M/d/yyyy");
+        var s = v.ToString() ?? "";
+        if (DateTime.TryParse(s, out var parsed)) return parsed.ToString("M/d/yyyy");
+        return s;
     }
 
     // ── Geo helper (kept for tracking routes) ───────────────────────────────
@@ -1389,15 +1393,16 @@ public sealed class DvtDbService
     {
         var cols = new[]
         {
-            new DrillCol("modelYear",   "Model Year",   "9%",  "center"),
-            new DrillCol("model",       "Model",        "10%", "center"),
-            new DrillCol("occ",         "OCC",          "5%",  "center"),
-            new DrillCol("vin",         "VIN",          "19%"),
-            new DrillCol("saleDate",    "Sale Date",    "10%", "center"),
-            new DrillCol("customer",    "Customer",     "19%"),
-            new DrillCol("salesperson", "Salesperson",  "15%"),
-            new DrillCol("group",       "Group",        "9%",  "center"),
-            new DrillCol("qty",         "Qty",          "4%",  "center"),
+            new DrillCol("modelYear",   "Model Year",              "8%",  "center"),
+            new DrillCol("model",       "Model",                   "8%",  "center"),
+            new DrillCol("series",      "Truck Series",            "9%",  "center"),
+            new DrillCol("occ",         "OCC",                     "5%",  "center"),
+            new DrillCol("vin",         "VIN",                     "17%"),
+            new DrillCol("saleDate",    "Retail Sales Date",       "10%", "center"),
+            new DrillCol("customer",    "Customer Bussiness Name", "18%"),
+            new DrillCol("salesperson", "Sales Person Name",       "13%"),
+            new DrillCol("group",       "Customer Group",          "8%",  "center"),
+            new DrillCol("qty",         "Quantity",                "4%",  "center"),
         };
 
         var filtered = rows
@@ -1413,6 +1418,7 @@ public sealed class DvtDbService
         {
             ["modelYear"]   = Str(r, "model_year"),
             ["model"]       = Str(r, "model"),
+            ["series"]      = Str(r, "series"),
             ["occ"]         = Str(r, "occ"),
             ["vin"]         = Str(r, "vin"),
             ["saleDate"]    = DateFmt(r, "retail_sales_date"),
