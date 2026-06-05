@@ -1288,13 +1288,14 @@ public sealed class DvtDbService
         return new DrillTable(cols, dataRows);
     }
 
-    // IRIS detail: vertical metric/value (YTD / 1st half / 2nd half net utilization).
+    // IRIS detail: horizontal — YTD / 1st half / 2nd half net utilization as one row.
     private static DrillTable BuildIrisDrillTable(List<Dictionary<string, object?>> rows)
     {
         var cols = new[]
         {
-            new DrillCol("metric", "Metric", "60%"),
-            new DrillCol("value",  "Value",  "40%", "right"),
+            new DrillCol("ytd",    "Year to Date",            "34%", "center"),
+            new DrillCol("first",  "First half of the year",  "33%", "center"),
+            new DrillCol("second", "Second half of the year", "33%", "center"),
         };
 
         if (rows.Count == 0) return new DrillTable(cols, Array.Empty<DrillRow>());
@@ -1308,9 +1309,12 @@ public sealed class DvtDbService
         var r = rows[0];
         var dataRows = new[]
         {
-            new DrillRow(new Dictionary<string, string> { ["metric"] = "Year to Date",            ["value"] = P(Str(r, "ytd_net_utilization")) }),
-            new DrillRow(new Dictionary<string, string> { ["metric"] = "First half of the year",  ["value"] = P(Str(r, "1st_half_net_utilization")) }),
-            new DrillRow(new Dictionary<string, string> { ["metric"] = "Second half of the year", ["value"] = P(Str(r, "2nd_half_net_utilization")) }),
+            new DrillRow(new Dictionary<string, string>
+            {
+                ["ytd"]    = P(Str(r, "ytd_net_utilization")),
+                ["first"]  = P(Str(r, "1st_half_net_utilization")),
+                ["second"] = P(Str(r, "2nd_half_net_utilization")),
+            }),
         };
 
         return new DrillTable(cols, dataRows);
