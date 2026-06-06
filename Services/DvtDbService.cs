@@ -143,6 +143,9 @@ public sealed class DvtDbService
     }
 
     private static string Str(Dictionary<string, object?> row, string key) => Col<string>(row, key) ?? string.Empty;
+
+    // location_msg comments store '/' as <basl> — decode for display.
+    private static string DecodeMsg(string v) => string.IsNullOrEmpty(v) ? v : v.Replace("<basl>", "/");
     private static double Dbl(Dictionary<string, object?> row, string key) => Col<double>(row, key);
     private static int Int(Dictionary<string, object?> row, string key) => Col<int>(row, key);
     private static DateTime? Date(Dictionary<string, object?> row, string key) => Col<DateTime?>(row, key);
@@ -1208,8 +1211,7 @@ public sealed class DvtDbService
         if (locMsgRows.Count > 0)
         {
             var row  = locMsgRows[0];
-            var body = Str(row, "msg2");
-            if (string.IsNullOrEmpty(body)) body = Str(row, "msg1");
+            var body = DecodeMsg(Str(row, "msg2"));   // Service Parts edits msg2 (DSPM)
             var id   = Str(row, "location_id");
             messages.Add(new MessagePanel(
                 Id:          string.IsNullOrEmpty(id) ? "0" : id,
@@ -2517,7 +2519,7 @@ public sealed class DvtDbService
         if (locMsgRows.Count > 0)
         {
             var row  = locMsgRows[0];
-            var body = Str(row, "msg1");
+            var body = DecodeMsg(Str(row, "msg1"));   // Sales edits msg1 (DSM)
             var id   = Str(row, "location_id");
             messages.Add(new MessagePanel(
                 Id:          string.IsNullOrEmpty(id) ? "0" : id,
@@ -2687,23 +2689,20 @@ public sealed class DvtDbService
             commandType: CommandType.StoredProcedure);
     }
 
-    public void UpdateLocationMessage(int locationId, string body)
+    // Update a single location_msg column: Sales edits msg1 (DSM), Service edits msg2 (DSPM).
+    // Only the targeted column is written so the other comment is preserved. '/' is encoded as
+    // <basl> to match legacy storage (decoded again on read).
+    public void UpdateLocationMessage(int locationId, string body, string col)
     {
-        // Mirror DCNRepository.SaveMessage: split on '|' into msg1/msg2, unescape <basl> → /
-        var parts = body.Split('|');
-        var msg1 = parts[0].Replace("<basl>", "/");
-        var msg2 = parts.Length > 1 ? parts[1].Replace("<basl>", "/") : string.Empty;
-        var locId = locationId.ToString();
+        if (col != "msg1" && col != "msg2")
+            throw new ArgumentException("col must be 'msg1' or 'msg2'", nameof(col));
+
+        var data = (body ?? string.Empty).Replace("/", "<basl>");
 
         using var conn = OpenConnection();
         conn.Execute("sp_utl_update_data",
-            new { tbl = "dcn.location_msg", key = "location_id", value = locId, col = "msg1", data = msg1 },
+            new { tbl = "dcn.location_msg", key = "location_id", value = locationId.ToString(), col, data },
             commandType: CommandType.StoredProcedure);
-
-        if (!string.IsNullOrEmpty(msg2))
-            conn.Execute("sp_utl_update_data",
-                new { tbl = "dcn.location_msg", key = "location_id", value = locId, col = "msg2", data = msg2 },
-                commandType: CommandType.StoredProcedure);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

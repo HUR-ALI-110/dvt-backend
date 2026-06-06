@@ -100,7 +100,7 @@ public static class DashboardRoutes
 
                 if (view == "sales")
                 {
-                    db.UpdateLocationMessage(id, body.Body);
+                    db.UpdateLocationMessage(id, body.Body, "msg1");
                     updated = new MessagePanel(
                         Id:          messageId,
                         IconTone:    "green",
@@ -111,7 +111,7 @@ public static class DashboardRoutes
                 }
                 else if (view == "service-parts")
                 {
-                    db.UpdateLocationMessage(id, body.Body);
+                    db.UpdateLocationMessage(id, body.Body, "msg2");
                     updated = new MessagePanel(
                         Id:          messageId,
                         IconTone:    "green",
