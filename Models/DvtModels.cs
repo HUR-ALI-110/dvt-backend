@@ -142,9 +142,10 @@ public record ServicePartsDashboard(
     IReadOnlyList<MessagePanel> Messages,
     ServicePartsDrillThrough DrillThrough);
 
-// Service training drill: top-level person list + per-person individual course rows.
-// Clicking a person row in the list opens the matching individual rows (nested drill).
+// Service training drill: summary (% certified by category) + person list + per-person
+// individual course rows. Clicking a person row opens the matching individual rows (nested).
 public record ServiceTrainingDrill(
+    [property: JsonPropertyName("summary")] DrillTable Summary,
     [property: JsonPropertyName("list")] DrillTable List,
     [property: JsonPropertyName("individuals")] DrillTable Individuals);
 
@@ -175,12 +176,15 @@ public record EvSection(
     string ProgressLabel,
     IReadOnlyList<EvCard> Cards);
 
-// Step1 boxes 4/5 = per-course completion tables; Step2 instructor-led = person list
-// (clicking a name opens the matching Individuals rows — nested drill).
+// Step1 boxes 4/5 = per-course completion tables; Step2 instructor-led = three person
+// lists (tech / service / parts). Clicking a name filters the shared Individuals rows
+// (sp_rpt_dcn_ev_training_ind) by user_id — nested drill.
 public record EvDrillThrough(
     DrillTable Box4,
     DrillTable Box5,
-    DrillTable InstructorLed,
+    DrillTable InstructorLedTech,
+    DrillTable InstructorLedService,
+    DrillTable InstructorLedParts,
     DrillTable Individuals);
 
 public record EvReadinessDashboard(
