@@ -26,6 +26,7 @@ builder.Host.UseSerilog();
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<DvtDbService>();
+builder.Services.AddSingleton<UserSecurityService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -61,6 +62,7 @@ app.MapGet("/health", () => Results.Ok(new { ok = true, time = DateTimeOffset.Ut
     .WithTags("Health");
 
 // ── Routes ───────────────────────────────────────────────────────────────────
+app.MapAuthRoutes();
 app.MapDashboardRoutes();
 app.MapTrackingRoutes();
 
